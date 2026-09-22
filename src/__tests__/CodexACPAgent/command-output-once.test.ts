@@ -111,3 +111,34 @@ describe("command output is sent once", () => {
         expect(legacyOutput).toHaveProperty("rawOutput.formatted_output");
     });
 });
+
+describe("late output deltas", () => {
+    it("drops command and MCP output that arrives after completion", async () => {
+        const fixture = createCodexMockTestFixture();
+        const sessionId = "late-output";
+        const notifications: ServerNotification[] = [
+            {
+                method: "item/started",
+                params: {threadId: sessionId, turnId: "turn-1", startedAtMs: 0, item: command({status: "inProgress", aggregatedOutput: null, exitCode: null})},
+            },
+            {
+                method: "item/completed",
+                params: {threadId: sessionId, turnId: "turn-1", completedAtMs: 1, item: command()},
+            },
+            {
+                method: "item/commandExecution/outputDelta",
+                params: {threadId: sessionId, turnId: "turn-1", itemId: "cmd-1", delta: "late-command-output"},
+            },
+            {
+                method: "item/mcpToolCall/progress",
+                params: {threadId: sessionId, turnId: "turn-1", itemId: "cmd-1", message: "late-mcp-output"},
+            },
+        ];
+
+        await setupPromptAndSendNotifications(fixture, sessionId, createTestSessionState({sessionId}), notifications);
+
+        const dump = fixture.getAcpConnectionDump([]);
+        expect(dump).not.toContain("late-command-output");
+        expect(dump).not.toContain("late-mcp-output");
+    });
+});

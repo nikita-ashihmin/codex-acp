@@ -112,3 +112,35 @@ describe("ToolCallReports", () => {
         expect(reports.prepare("other", repeated)).toEqual(repeated);
     });
 });
+
+describe("ToolCallReports late output", () => {
+    it("drops output chunks that arrive after the tool call finished", () => {
+        const reports = new ToolCallReports();
+        reports.prepare("s", {sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "ls", status: "in_progress"});
+        reports.prepare("s", {sessionUpdate: "tool_call_update", toolCallId: "cmd-1", status: "completed"});
+
+        expect(reports.prepare("s", {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            _meta: {terminal_output_delta: {data: "late\n", terminal_id: "cmd-1"}},
+        })).toBeNull();
+        expect(reports.prepare("s", {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            _meta: {mcp_output_delta: {data: "late"}},
+        })).toBeNull();
+    });
+
+    it("accepts output again when the tool call id starts a new tool call", () => {
+        const reports = new ToolCallReports();
+        reports.prepare("s", {sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "ls", status: "completed"});
+        reports.prepare("s", {sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "ls", status: "in_progress"});
+        const chunk = {
+            sessionUpdate: "tool_call_update" as const,
+            toolCallId: "cmd-1",
+            _meta: {terminal_output_delta: {data: "new\n", terminal_id: "cmd-1"}},
+        };
+
+        expect(reports.prepare("s", chunk)).toEqual(chunk);
+    });
+});
