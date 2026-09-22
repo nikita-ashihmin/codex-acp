@@ -52,16 +52,6 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "call-id",
         "status": "failed",
-        "rawInput": {
-          "server": "ijproxy",
-          "tool": "read_file",
-          "arguments": {
-            "file_path": ".ai/local.md",
-            "mode": "slice",
-            "start_line": 1,
-            "max_lines": 200
-          }
-        },
         "rawOutput": {
           "result": null,
           "error": {

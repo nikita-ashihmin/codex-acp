@@ -27,7 +27,6 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "plain-tool",
-        "name": "read_file",
         "status": "completed"
       }
     }
@@ -62,7 +61,6 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "functions.tool",
-        "name": "functions.read_file",
         "status": "completed"
       }
     }
@@ -97,7 +95,6 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "toolstool",
-        "name": "toolsread_file",
         "status": "completed"
       }
     }

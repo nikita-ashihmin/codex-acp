@@ -121,8 +121,9 @@ describe("CodexEventHandler - collab agent tool call events", () => {
             .filter(update => update.toolCallId === "call-spawn-weather");
         expect(collaborationUpdates).toMatchObject([
             {sessionUpdate: "tool_call", title: "spawnAgent", status: "in_progress"},
-            {sessionUpdate: "tool_call_update", title: "spawnAgent", status: "completed"},
+            {sessionUpdate: "tool_call_update", status: "completed"},
         ]);
+        expect(collaborationUpdates[1]).not.toHaveProperty("title");
 
         mockFixture.setPermissionResponse({outcome: {outcome: "selected", optionId: "allow_once"}});
         await mockFixture.sendServerRequest("item/commandExecution/requestApproval", {
@@ -783,7 +784,7 @@ describe("CodexEventHandler - collab agent tool call events", () => {
         expect(updates.map(update => [update.sessionUpdate, update.toolCallId, update.title])).toEqual([
             ["subagent_spawned", undefined, undefined],
             ["tool_call", "send-input", "sendInput"],
-            ["tool_call_update", "send-input", "sendInput"],
+            ["tool_call_update", "send-input", undefined],
             ["subagent_state_update", undefined, undefined],
         ]);
     });

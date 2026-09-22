@@ -425,7 +425,11 @@ export class CodexEventHandler {
         if (ignoredBySubagents) return;
         if (updateEvent === undefined) updateEvent = await this.createUpdateEvent(notification);
         if (updateEvent) {
-            await this.session.update(updateEvent, this.subagents.notificationSessionId(notification));
+            const sessionId = this.subagents.notificationSessionId(notification);
+            const prepared = this.sessionState.toolCallReports.prepare(sessionId, updateEvent);
+            if (prepared) {
+                await this.session.update(prepared, sessionId);
+            }
         }
     }
 

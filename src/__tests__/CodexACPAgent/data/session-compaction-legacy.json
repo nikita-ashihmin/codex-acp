@@ -26,13 +26,7 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "compaction-item",
-        "title": "Compact conversation",
-        "status": "completed",
-        "_meta": {
-          "contextCompaction": {
-            "version": 1
-          }
-        }
+        "status": "completed"
       }
     }
   ]

@@ -66,13 +66,6 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "call-id",
         "status": "failed",
-        "rawInput": {
-          "server": "server-name",
-          "tool": "tool-name",
-          "arguments": {
-            "argument": "example"
-          }
-        },
         "rawOutput": {
           "result": null,
           "error": {

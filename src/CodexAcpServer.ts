@@ -60,6 +60,7 @@ import type {QuotaMeta} from "./QuotaMeta";
 import {logger} from "./Logger";
 import {sanitizeMcpServerName} from "./McpServerName";
 import {createResponseItemHistoryFallbackUpdates} from "./ResponseItemHistoryFallback";
+import {ToolCallReports} from "./ToolCallReports";
 import {
     AUTH_STATUS_META_KEY,
     AUTH_STATUS_UPDATE_METHOD,
@@ -197,6 +198,7 @@ export interface SessionState {
     subagents: CodexSubagentEventRouter;
     asyncTasks: CodexBackgroundTerminalTasks;
     compactions: CodexSessionCompactions;
+    toolCallReports: ToolCallReports;
 }
 
 export type SessionFailureCategory =
@@ -710,6 +712,7 @@ export class CodexAcpServer {
             ),
             asyncTasks: this.createAsyncTasks(sessionId),
             compactions: new CodexSessionCompactions(),
+            toolCallReports: new ToolCallReports(),
         };
         sessionState.titleGen = new TitleGenerator(
             this.codexAcpClient.appServerClient,
@@ -1969,6 +1972,7 @@ export class CodexAcpServer {
             ),
             asyncTasks: this.createAsyncTasks(sessionId),
             compactions: new CodexSessionCompactions(),
+            toolCallReports: new ToolCallReports(),
         };
         sessionState.titleGen = new TitleGenerator(
             this.codexAcpClient.appServerClient,

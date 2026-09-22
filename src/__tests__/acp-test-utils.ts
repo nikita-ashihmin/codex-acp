@@ -1,6 +1,7 @@
 import * as acp from "@agentclientprotocol/sdk";
 import type {CreateElicitationResponse, McpServerStdio, RequestPermissionResponse} from "@agentclientprotocol/sdk";
 import {CodexAcpClient} from '../CodexAcpClient';
+import {ToolCallReports} from "../ToolCallReports";
 import {CodexAppServerClient, type CodexConnectionEvent} from '../CodexAppServerClient';
 import {type CodexConnection, startCodexConnection} from "../CodexJsonRpcConnection";
 import {CodexAcpServer, type CodexProcessState, type SessionState} from "../CodexAcpServer";
@@ -424,6 +425,7 @@ export function createTestSessionState(overrides?: Partial<SessionState>): Sessi
         sessionTitle: null,
         sessionTitleSource: "unknown",
         compactions: new CodexSessionCompactions(),
+        toolCallReports: new ToolCallReports(),
         subagents: new CodexSubagentEventRouter(
             sessionId,
             false,
