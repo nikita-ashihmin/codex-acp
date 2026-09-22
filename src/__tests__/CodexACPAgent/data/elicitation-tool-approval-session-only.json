@@ -8,6 +8,14 @@
         "kind": "execute",
         "status": "pending",
         "title": "MCP tool call approval",
+        "rawInput": {
+          "serverName": "tool-server",
+          "description": "Allow tool call?",
+          "schema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
         "content": [
           {
             "type": "content",
@@ -16,15 +24,7 @@
               "text": "Allow tool call?"
             }
           }
-        ],
-        "rawInput": {
-          "serverName": "tool-server",
-          "description": "Allow tool call?",
-          "schema": {
-            "type": "object",
-            "properties": {}
-          }
-        }
+        ]
       },
       "_meta": "_meta",
       "options": [

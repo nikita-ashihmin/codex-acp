@@ -130,7 +130,7 @@ describe("Approval Events", () => {
             await finish(prompt);
         });
 
-        it("keeps the status, title and raw input of a started command", async () => {
+        it("keeps the status and the title of a started command and carries the raw input", async () => {
             const prompt = setupSessionWithPendingPrompt();
             fixture.sendServerNotification({
                 method: "item/started",
@@ -161,9 +161,12 @@ describe("Approval Events", () => {
 
             await fixture.sendServerRequest("item/commandExecution/requestApproval", commandParams(["accept", "cancel"]));
 
-            expect(permissionRequest().toolCall).not.toHaveProperty("status");
-            expect(permissionRequest().toolCall).not.toHaveProperty("title");
-            expect(permissionRequest().toolCall).not.toHaveProperty("rawInput");
+            // The request carries the title that the tool call already shows, so the client keeps it.
+            expect(permissionRequest().toolCall).toEqual({
+                toolCallId: "command-item",
+                title: "npm test",
+                rawInput: {command: "npm test", cwd: "/workspace"},
+            });
             await finish(prompt);
         });
 
@@ -650,9 +653,10 @@ describe("Approval Events", () => {
             );
 
             expect(response).toEqual({decision: "acceptForSession"});
-            // The file change already started, so the request keeps its status, kind and title.
+            // The file change already started, so the request keeps its status and kind.
             expect(permissionRequest().toolCall).toEqual({
                 toolCallId: "file-item",
+                title: "Editing files",
                 locations: [{path: "/workspace/a.ts"}, {path: "/workspace/b.ts"}],
             });
             expect(permissionRequest()).toMatchObject({

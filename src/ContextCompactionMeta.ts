@@ -1,9 +1,12 @@
-import {AIR_CONTEXT_COMPACTION_KEY, withAirMeta} from "./AirExtension";
-
 export const CONTEXT_COMPACTION_META_VERSION = 1;
 
 export type ContextCompactionTrigger = "manual" | "automatic";
 
+/**
+ * Facts of a synthetic ACP context-compaction tool call, in `_meta.jetbrains.air.contextCompaction`.
+ * The standard toolCallId and status fields own lifecycle identity and phase;
+ * this extension carries only compaction-specific facts.
+ */
 export interface ContextCompactionMetadata {
     version: typeof CONTEXT_COMPACTION_META_VERSION;
     trigger?: ContextCompactionTrigger;
@@ -13,17 +16,11 @@ export interface ContextCompactionMetadata {
     error?: string;
 }
 
-/**
- * AIR metadata for a synthetic ACP context-compaction tool call, in `_meta.jetbrains.air.contextCompaction`.
- * The standard toolCallId and status fields own lifecycle identity and phase;
- * this extension carries only compaction-specific facts.
- */
-export function createContextCompactionMeta(
+export function createContextCompactionMetadata(
     metadata: Omit<ContextCompactionMetadata, "version"> = {},
-): Record<string, unknown> {
-    const compaction: ContextCompactionMetadata = {
+): ContextCompactionMetadata {
+    return {
         version: CONTEXT_COMPACTION_META_VERSION,
         ...metadata,
     };
-    return withAirMeta(undefined, AIR_CONTEXT_COMPACTION_KEY, compaction);
 }

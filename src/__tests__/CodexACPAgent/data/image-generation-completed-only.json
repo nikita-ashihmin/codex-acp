@@ -18,11 +18,7 @@
               "mimeType": "image/png"
             }
           }
-        ],
-        "rawOutput": {
-          "status": "generating",
-          "revisedPrompt": null
-        }
+        ]
       }
     }
   ]

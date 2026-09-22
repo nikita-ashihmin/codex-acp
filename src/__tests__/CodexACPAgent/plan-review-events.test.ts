@@ -1,6 +1,7 @@
 import * as acp from "@agentclientprotocol/sdk";
 import {beforeEach, describe, expect, it, vi} from "vitest";
 import {PLAN_COLLABORATION_MODE} from "../../CollaborationModeConfig";
+import {ClientCapabilities} from "../../tool-calls/ClientCapabilities";
 import {
     createCodexMockTestFixture,
     createTestSessionState,
@@ -81,6 +82,7 @@ describe("CodexACPAgent - plan review", () => {
         const sessionState = createTestSessionState({
             sessionId,
             collaborationMode: PLAN_COLLABORATION_MODE,
+            clientCapabilities: ClientCapabilities.from({plan: {}}),
         });
         vi.spyOn(fixture.getCodexAcpAgent(), "getSessionState").mockReturnValue(sessionState);
 
@@ -183,14 +185,17 @@ describe("CodexACPAgent - plan review", () => {
                     toolCallId: "plan-review:plan-item",
                     title: "Implement this plan?",
                     kind: "switch_mode",
-                    rawInput: {plan: "# Implementation plan\n\n1. Make the change."},
                 }),
                 options: [
                     {optionId: "implement_plan", name: "Yes, implement this plan", kind: "allow_once"},
                     {optionId: "revise_plan", name: "No, and tell Codex what to do differently", kind: "reject_once"},
                 ],
+                _meta: {jetbrains: {air: {version: 1, planReview: {planItemId: "plan-item"}}}},
             })],
         });
+        // The client already has the plan, so the request does not repeat it.
+        const request = events.find(event => event.method === "requestPermission")!;
+        expect(request.args[0].toolCall).not.toHaveProperty("rawInput");
         expect(events).toContainEqual({
             method: "sessionUpdate",
             args: [{

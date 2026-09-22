@@ -53,10 +53,7 @@
         "toolCallId": "call-id",
         "status": "failed",
         "rawOutput": {
-          "result": null,
-          "error": {
-            "message": "File /Users/aleksandr.slapoguzov/Projects/ultimate/.ai/local.md doesn't exist or can't be opened"
-          }
+          "error": "File /Users/aleksandr.slapoguzov/Projects/ultimate/.ai/local.md doesn't exist or can't be opened"
         }
       }
     }

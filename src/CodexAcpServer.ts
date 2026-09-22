@@ -3,11 +3,6 @@ import {RequestError, type SessionId, type SessionModeState} from "@agentclientp
 import {CodexEventHandler, type CompletedPlan} from "./CodexEventHandler";
 import {CodexApprovalHandler} from "./permissions/CodexApprovalHandler";
 import {PermissionLifecycleContext} from "./permissions/lifecycle";
-import {
-    planImplementationApproved,
-    planImplementationPermissionRequest,
-    planImplementationToolCallId,
-} from "./permissions/plan-review";
 import {CodexElicitationHandler} from "./CodexElicitationHandler";
 import {type CodexAuthRequest, getCodexAuthMethods, isCodexAuthRequest} from "./CodexAuthMethod";
 import {clientSupportsUrlElicitation} from "./ElicitationCapabilities";
@@ -83,20 +78,24 @@ import {
     type SessionSteeringResponse,
     type SessionSteerRequest,
 } from "./AcpExtensions";
+import {AcpToolCallRenderer} from "./tool-calls/AcpToolCallRenderer";
 import {
-    commandExecutionUsesTerminalOutput,
-    createCollabAgentToolCallUpdate,
-    createCommandExecutionCompleteUpdate,
-    createCommandExecutionUpdate,
-    createCompletedContextCompactionUpdate,
-    createDynamicToolCallUpdate,
-    createFileChangeUpdate,
-    createImageGenerationUpdate,
-    createImageViewUpdate,
-    createMcpToolCallUpdate,
-    createSubAgentActivityUpdate,
-    formatWebSearchTitle,
-} from "./CodexToolCallMapper";
+    AIR_PLAN_CONTENT_DELTA_KEY,
+    AIR_RAW_INPUT_RENDERING_KEY,
+    ClientCapabilities,
+} from "./tool-calls/ClientCapabilities";
+import {CollabAgentReporter} from "./tool-calls/reporters/CollabAgentReporter";
+import {CommandReporter} from "./tool-calls/reporters/CommandReporter";
+import {CompactionReporter} from "./tool-calls/reporters/CompactionReporter";
+import {DynamicToolReporter} from "./tool-calls/reporters/DynamicToolReporter";
+import {FileChangeReporter} from "./tool-calls/reporters/FileChangeReporter";
+import {ImageGenerationReporter} from "./tool-calls/reporters/ImageGenerationReporter";
+import {ImageViewReporter} from "./tool-calls/reporters/ImageViewReporter";
+import {McpStartupReporter} from "./tool-calls/reporters/McpStartupReporter";
+import {McpToolReporter} from "./tool-calls/reporters/McpToolReporter";
+import {PlanReviewReporter} from "./tool-calls/reporters/PlanReviewReporter";
+import {SubagentActivityReporter} from "./tool-calls/reporters/SubagentActivityReporter";
+import {WebSearchReporter} from "./tool-calls/reporters/WebSearchReporter";
 import {
     clientSupportsBooleanConfigOptions,
     createFastModeConfigOption,
@@ -108,13 +107,6 @@ import {
 } from "./FastModeConfig";
 import packageJson from "../package.json";
 import {isJetBrains2026_1Client} from "./JBUtils";
-import {
-    type CommandOutputChannel,
-    resolveCommandOutputChannel,
-    resolveTerminalOutputMode,
-    type TerminalOutputMode,
-} from "./TerminalOutputMode";
-import {clientSupportsPlanUpdates} from "./PlanCapabilities";
 import {
     createAgentTextMessageChunk,
     createAgentTextThoughtChunk,
@@ -191,8 +183,8 @@ export interface SessionState {
     fastModeEnabled: boolean;
     currentModelSupportsFast: boolean;
     sessionMcpServers?: Array<string>;
-    terminalOutputMode: TerminalOutputMode;
-    commandOutputChannel: CommandOutputChannel;
+    /** The capability choices of the client for tool call and plan reports. */
+    clientCapabilities: ClientCapabilities;
     currentGoal?: ThreadGoalSnapshot | null;
     goalRevision: number;
     sessionTitle: string | null;
@@ -282,8 +274,8 @@ export class CodexAcpServer {
     private availableCommands: CodexCommands;
     private clientInfo: acp.Implementation | null;
     private clientCapabilities: acp.ClientCapabilities | null;
-    private terminalOutputMode: TerminalOutputMode;
-    private commandOutputChannel: CommandOutputChannel;
+    /** The capability choices of the client for tool call and plan reports. */
+    private capabilities: ClientCapabilities;
     private booleanConfigOptionsSupported: boolean;
     /** Last `authStatus` pushed to the client; used to suppress duplicates. */
     private currentAuthStatus: AuthStatus | null;
@@ -332,8 +324,7 @@ export class CodexAcpServer {
         this.sessionFailureEpoch = randomUUID();
         this.clientInfo = null;
         this.clientCapabilities = null;
-        this.terminalOutputMode = "terminal_output_delta";
-        this.commandOutputChannel = "rawOutput";
+        this.capabilities = ClientCapabilities.DEFAULT;
         this.booleanConfigOptionsSupported = false;
         this.currentAuthStatus = null;
         this.availableCommands = this.createAvailableCommands(codexAcpClient);
@@ -356,8 +347,7 @@ export class CodexAcpServer {
         this.clientInfo = _params.clientInfo ?? null;
         this.clientCapabilities = _params.clientCapabilities ?? null;
         this.initializeRequest = _params;
-        this.terminalOutputMode = resolveTerminalOutputMode(_params.clientCapabilities);
-        this.commandOutputChannel = resolveCommandOutputChannel(_params.clientCapabilities);
+        this.capabilities = ClientCapabilities.from(_params.clientCapabilities);
         this.booleanConfigOptionsSupported = clientSupportsBooleanConfigOptions(_params.clientCapabilities);
         await this.runWithProcessCheck(() => this.codexAcpClient.initialize(_params));
         this.publishFirstAuthStatusAfterResponse();
@@ -419,6 +409,8 @@ export class CodexAcpServer {
                             AIR_NATIVE_SUBAGENT_SESSIONS_KEY,
                             AIR_ASYNC_TASKS_KEY,
                             AIR_RECOMMENDED_CONFIG_VALUE_KEY,
+                            AIR_RAW_INPUT_RENDERING_KEY,
+                            AIR_PLAN_CONTENT_DELTA_KEY,
                         ],
                     },
                 },
@@ -706,8 +698,7 @@ export class CodexAcpServer {
             fastModeEnabled: sessionMetadata.currentServiceTier === "fast",
             currentModelSupportsFast: currentModelSupportsFast,
             sessionMcpServers: sessionMcpServers,
-            terminalOutputMode: this.terminalOutputMode,
-            commandOutputChannel: this.commandOutputChannel,
+            clientCapabilities: this.capabilities,
             goalRevision: 0,
             sessionTitle: null,
             sessionTitleSource: operation === "resume" ? "unknown" : "unset",
@@ -1964,8 +1955,7 @@ export class CodexAcpServer {
             fastModeEnabled: sessionMetadata.currentServiceTier === "fast",
             currentModelSupportsFast: currentModelSupportsFast,
             sessionMcpServers: sessionMcpServers,
-            terminalOutputMode: this.terminalOutputMode,
-            commandOutputChannel: this.commandOutputChannel,
+            clientCapabilities: this.capabilities,
             goalRevision: 0,
             sessionTitle: null,
             sessionTitleSource: "unset",
@@ -2024,8 +2014,7 @@ export class CodexAcpServer {
         }
         const responseItemFallbackUpdates = await createResponseItemHistoryFallbackUpdates(
             thread,
-            sessionState.terminalOutputMode,
-            sessionState.commandOutputChannel,
+            sessionState.clientCapabilities,
         );
 
         const threadUpdates: UpdateSessionEvent[] = [];
@@ -2257,6 +2246,7 @@ export class CodexAcpServer {
     }
 
     private async createHistoryUpdates(item: ThreadItem, sessionState: SessionState): Promise<UpdateSessionEvent[]> {
+        const renderer = new AcpToolCallRenderer(sessionState.clientCapabilities);
         switch (item.type) {
             case "userMessage":
                 return this.createUserMessageUpdates(item);
@@ -2265,7 +2255,7 @@ export class CodexAcpServer {
             case "sleep":
                 return [];
             case "subAgentActivity":
-                return [createSubAgentActivityUpdate(item, "completed", "tool_call")];
+                return [renderer.render(SubagentActivityReporter.activity(item, "completed", "start"))];
             case "agentMessage": {
                 const meta = createMessagePhaseMeta(item.phase);
                 return [{
@@ -2278,34 +2268,21 @@ export class CodexAcpServer {
             case "reasoning":
                 return this.createReasoningUpdates(item);
             case "fileChange":
-                return [await createFileChangeUpdate(
-                    item,
-                    clientSupportsAirCapability(this.clientCapabilities, AIR_DIFF_PATCH_KEY),
-                )];
-            case "commandExecution": {
-                const updates = [await createCommandExecutionUpdate(item)];
-                if (item.status !== "inProgress") {
-                    updates.push(createCommandExecutionCompleteUpdate(item, {
-                        terminalOutputMode: sessionState.terminalOutputMode,
-                        channel: sessionState.commandOutputChannel,
-                        hasTerminal: commandExecutionUsesTerminalOutput(item),
-                        outputStreamed: false,
-                    }));
-                }
-                return updates;
-            }
+                return [renderer.render(await FileChangeReporter.started(item, renderer.capabilities.air.diffPatch))];
+            case "commandExecution":
+                return CommandReporter.history(item).map(facts => renderer.render(facts));
             case "mcpToolCall":
-                return [await createMcpToolCallUpdate(item)];
+                return [renderer.render(McpToolReporter.started(item))];
             case "dynamicToolCall":
-                return [await createDynamicToolCallUpdate(item)];
+                return [renderer.render(DynamicToolReporter.started(item))];
             case "collabAgentToolCall":
-                return [createCollabAgentToolCallUpdate(item)];
+                return [renderer.render(CollabAgentReporter.started(item))];
             case "webSearch":
-                return [this.createWebSearchUpdate(item)];
+                return [renderer.render(WebSearchReporter.history(item))];
             case "imageView":
-                return [createImageViewUpdate(item)];
+                return [renderer.render(ImageViewReporter.viewed(item))];
             case "imageGeneration":
-                return [createImageGenerationUpdate(item)];
+                return [renderer.render(ImageGenerationReporter.whole(item))];
             case "enteredReviewMode":
                 return [this.createReviewModeUpdate(item, true)];
             case "exitedReviewMode":
@@ -2313,7 +2290,7 @@ export class CodexAcpServer {
             case "contextCompaction":
                 return [clientSupportsCompaction(this.clientCapabilities)
                     ? createCompactionUpdate(item.id, "completed")
-                    : createCompletedContextCompactionUpdate(item)];
+                    : renderer.render(CompactionReporter.history(item))];
             case "plan":
                 return item.text.length > 0 ? [this.createPlanHistoryUpdate(item)] : [];
         }
@@ -2337,22 +2314,6 @@ export class CodexAcpServer {
         return parts.map((text) => createAgentTextThoughtChunk(text, messageId));
     }
 
-    private createWebSearchUpdate(
-        item: ThreadItem & { type: "webSearch" }
-    ): UpdateSessionEvent {
-        return {
-            sessionUpdate: "tool_call",
-            toolCallId: item.id,
-            kind: "search",
-            title: formatWebSearchTitle(item),
-            status: "completed",
-            rawInput: {
-                query: item.query,
-                action: item.action,
-            },
-        };
-    }
-
     private createReviewModeUpdate(
         item: ThreadItem & { type: "enteredReviewMode" | "exitedReviewMode" },
         entered: boolean
@@ -2369,7 +2330,7 @@ export class CodexAcpServer {
     private createPlanHistoryUpdate(
         item: ThreadItem & { type: "plan" }
     ): UpdateSessionEvent {
-        if (clientSupportsPlanUpdates(this.clientCapabilities)) {
+        if (this.capabilities.planUpdates) {
             return {
                 sessionUpdate: "plan_update",
                 plan: {
@@ -2516,14 +2477,15 @@ export class CodexAcpServer {
             }
         }
 
-        for (const update of CodexEventHandler.createMcpStartupUpdates({
+        const renderer = new AcpToolCallRenderer(this.capabilities);
+        for (const facts of McpStartupReporter.failures({
             ...filteredStartup,
             ready: readyAfterOauth,
             failed: failuresAfterOauth,
         })) {
             await this.connection.notify(acp.methods.client.session.update, {
                 sessionId,
-                update,
+                update: renderer.render(facts),
             });
         }
     }
@@ -2827,28 +2789,29 @@ export class CodexAcpServer {
             const promptEventHandler = new CodexEventHandler(
                 this.connection,
                 sessionState,
-                clientSupportsPlanUpdates(this.clientCapabilities),
                 clientSupportsTypedSessionFailures(this.clientCapabilities),
                 this.sessionFailureEpoch,
                 sessionState.subagents,
                 (accountUpdated) => this.handleAccountUpdated(accountUpdated),
                 agentFileChangeReportRequest !== null,
                 clientSupportsCompaction(this.clientCapabilities),
-                clientSupportsAirCapability(this.clientCapabilities, AIR_DIFF_PATCH_KEY),
             );
             eventHandler = promptEventHandler;
             const permissionLifecycle = this.permissionLifecycleContext(sessionState);
             const permissionContext = permissionLifecycle.beginPrompt();
+            const toolCallRenderer = new AcpToolCallRenderer(this.capabilities);
             const approvalHandler = new CodexApprovalHandler(
                 this.connection,
                 permissionContext,
                 activePrompt.signal,
+                toolCallRenderer,
             );
             const elicitationHandler = new CodexElicitationHandler(
                 this.connection,
                 permissionContext,
                 this.clientCapabilities,
                 activePrompt.signal,
+                toolCallRenderer,
             );
             const observeInteraction = async (event: ServerNotification): Promise<void> => {
                 permissionContext.handleNotification(event);
@@ -3273,24 +3236,17 @@ export class CodexAcpServer {
         plan: CompletedPlan,
         cancellationSignal: AbortSignal,
     ): Promise<boolean> {
-        const toolCallId = planImplementationToolCallId(plan);
+        const renderer = new AcpToolCallRenderer(sessionState.clientCapabilities);
         try {
             const response = await this.connection.request(
                 acp.methods.client.session.requestPermission,
-                planImplementationPermissionRequest(sessionState.sessionId, plan),
+                PlanReviewReporter.permissionRequest(sessionState.sessionId, plan, renderer),
                 {cancellationSignal},
             );
-            const approved = planImplementationApproved(response);
+            const approved = PlanReviewReporter.approved(response);
             await this.connection.notify(acp.methods.client.session.update, {
                 sessionId: sessionState.sessionId,
-                update: {
-                    sessionUpdate: "tool_call_update",
-                    toolCallId,
-                    status: "completed",
-                    rawOutput: approved
-                        ? "User approved the plan."
-                        : "User kept the session in plan mode.",
-                },
+                update: renderer.render(PlanReviewReporter.decided(plan, approved)),
             });
             return approved;
         } catch (error) {

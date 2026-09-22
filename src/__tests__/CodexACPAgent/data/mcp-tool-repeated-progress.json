@@ -67,10 +67,7 @@
         "toolCallId": "call-id",
         "status": "failed",
         "rawOutput": {
-          "result": null,
-          "error": {
-            "message": "Polling for status"
-          }
+          "error": "Polling for status"
         }
       }
     }

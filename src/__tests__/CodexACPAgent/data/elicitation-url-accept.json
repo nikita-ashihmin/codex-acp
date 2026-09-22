@@ -8,6 +8,11 @@
         "kind": "fetch",
         "status": "pending",
         "title": "MCP server requests to open a URL",
+        "rawInput": {
+          "serverName": "auth-server",
+          "description": "Please authorize access to your GitHub account",
+          "url": "https://example.com/authorize?id=elicit-789"
+        },
         "content": [
           {
             "type": "content",
@@ -16,12 +21,7 @@
               "text": "Please authorize access to your GitHub account"
             }
           }
-        ],
-        "rawInput": {
-          "serverName": "auth-server",
-          "description": "Please authorize access to your GitHub account",
-          "url": "https://example.com/authorize?id=elicit-789"
-        }
+        ]
       },
       "options": [
         {

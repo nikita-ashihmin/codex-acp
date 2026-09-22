@@ -1,12 +1,10 @@
 import type {ServerNotification} from "../app-server";
 import type {ThreadItem} from "../app-server/v2";
-import {ACPSessionConnection, type UpdateSessionEvent} from "../ACPSessionConnection";
+import type {ACPSessionConnection} from "../ACPSessionConnection";
 import {logger} from "../Logger";
-import {
-    createCollabAgentToolCallCompleteUpdate,
-    createCollabAgentToolCallUpdate,
-    createSubAgentActivityUpdate,
-} from "../CodexToolCallMapper";
+import {CollabAgentReporter} from "../tool-calls/reporters/CollabAgentReporter";
+import {SubagentActivityReporter} from "../tool-calls/reporters/SubagentActivityReporter";
+import type {ToolFacts} from "../tool-calls/ToolFacts";
 import type {SubagentState} from "./AcpSubagents";
 import {isRootAgentPath, nameFromAgentPath, normalizeAgentPath} from "./CodexAgentPath";
 
@@ -228,24 +226,22 @@ export class CodexSubagentEventRouter {
         });
     }
 
-    legacyActivityStarted(item: ThreadItem & {type: "subAgentActivity"}): UpdateSessionEvent {
+    legacyActivityStarted(item: ThreadItem & {type: "subAgentActivity"}): ToolFacts {
         this.activeLegacyActivities.add(item.id);
-        return createSubAgentActivityUpdate(item, "in_progress", "tool_call");
+        return SubagentActivityReporter.activity(item, "in_progress", "start");
     }
 
-    legacyCollaborationStarted(item: ThreadItem & {type: "collabAgentToolCall"}): UpdateSessionEvent {
-        return createCollabAgentToolCallUpdate(item);
+    legacyCollaborationStarted(item: ThreadItem & {type: "collabAgentToolCall"}): ToolFacts {
+        return CollabAgentReporter.started(item);
     }
 
-    legacyCollaborationCompleted(item: ThreadItem & {type: "collabAgentToolCall"}): UpdateSessionEvent {
-        return createCollabAgentToolCallCompleteUpdate(item);
+    legacyCollaborationCompleted(item: ThreadItem & {type: "collabAgentToolCall"}): ToolFacts {
+        return CollabAgentReporter.completed(item);
     }
 
-    legacyActivityCompleted(item: ThreadItem & {type: "subAgentActivity"}): UpdateSessionEvent {
-        const sessionUpdate = this.activeLegacyActivities.delete(item.id)
-            ? "tool_call_update"
-            : "tool_call";
-        return createSubAgentActivityUpdate(item, "completed", sessionUpdate);
+    legacyActivityCompleted(item: ThreadItem & {type: "subAgentActivity"}): ToolFacts {
+        const report = this.activeLegacyActivities.delete(item.id) ? "update" : "start";
+        return SubagentActivityReporter.activity(item, "completed", report);
     }
 
     /** The caller finalizes pending child updates before closing timed-out sessions. */

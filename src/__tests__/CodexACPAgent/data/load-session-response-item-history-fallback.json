@@ -208,10 +208,10 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "call-rg",
-        "status": "in_progress",
+        "name": "exec_command",
         "kind": "search",
         "title": "Search for 'Service' in src",
-        "name": "exec_command"
+        "status": "in_progress"
       }
     }
   ]
@@ -246,10 +246,10 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "call-rg-failed",
-        "status": "in_progress",
+        "name": "exec_command",
         "kind": "search",
         "title": "Search for 'Missing' in src",
-        "name": "exec_command"
+        "status": "in_progress"
       }
     }
   ]
@@ -284,15 +284,15 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "call-read",
-        "status": "in_progress",
+        "name": "exec_command",
         "kind": "read",
         "title": "Read file '/test/project/src/index.ts'",
+        "status": "in_progress",
         "locations": [
           {
             "path": "/test/project/src/index.ts"
           }
-        ],
-        "name": "exec_command"
+        ]
       }
     }
   ]
@@ -327,10 +327,10 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "call-ls",
-        "status": "in_progress",
+        "name": "exec_command",
         "kind": "read",
         "title": "List files",
-        "name": "exec_command"
+        "status": "in_progress"
       }
     }
   ]

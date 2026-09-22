@@ -6,6 +6,7 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "plain-tool",
+        "name": "read_file",
         "kind": "execute",
         "title": "read_file",
         "status": "in_progress",
@@ -13,8 +14,7 @@
           "arguments": {
             "path": "/repo/config.json"
           }
-        },
-        "name": "read_file"
+        }
       }
     }
   ]
@@ -27,11 +27,7 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "plain-tool",
-        "status": "completed",
-        "rawOutput": {
-          "contentItems": null,
-          "success": true
-        }
+        "status": "completed"
       }
     }
   ]
@@ -44,6 +40,7 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "functions.tool",
+        "name": "functions.read_file",
         "kind": "execute",
         "title": "read_file",
         "status": "in_progress",
@@ -51,8 +48,7 @@
           "arguments": {
             "path": "/repo/config.json"
           }
-        },
-        "name": "functions.read_file"
+        }
       }
     }
   ]
@@ -65,11 +61,7 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "functions.tool",
-        "status": "completed",
-        "rawOutput": {
-          "contentItems": null,
-          "success": true
-        }
+        "status": "completed"
       }
     }
   ]
@@ -82,6 +74,7 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "toolstool",
+        "name": "toolsread_file",
         "kind": "execute",
         "title": "read_file",
         "status": "in_progress",
@@ -89,8 +82,7 @@
           "arguments": {
             "path": "/repo/config.json"
           }
-        },
-        "name": "toolsread_file"
+        }
       }
     }
   ]
@@ -103,11 +95,7 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "toolstool",
-        "status": "completed",
-        "rawOutput": {
-          "contentItems": null,
-          "success": true
-        }
+        "status": "completed"
       }
     }
   ]

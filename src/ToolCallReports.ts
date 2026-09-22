@@ -4,7 +4,7 @@ import {logger} from "./Logger";
 type ToolCallReport = Extract<UpdateSessionEvent, {sessionUpdate: "tool_call" | "tool_call_update"}>;
 
 /** The client appends these metadata values, so the adapter never compares them with an earlier value. */
-const OUTPUT_DELTA_META_KEYS = new Set(["terminal_output", "terminal_output_delta", "mcp_output_delta"]);
+const OUTPUT_DELTA_META_KEYS = new Set(["terminal_output", "terminal_output_delta", "terminal_input", "mcp_output_delta"]);
 const COMPARED_FIELDS = ["title", "kind", "status", "name", "content", "locations", "rawInput", "rawOutput"] as const;
 const META_FIELD_PREFIX = "_meta.";
 const MAX_FINISHED_TOOL_CALLS = 1024;

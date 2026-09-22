@@ -56,8 +56,8 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "command-terminal-output",
         "_meta": {
-          "terminal_output": {
-            "data": "\nyes\n",
+          "terminal_input": {
+            "data": "yes",
             "terminal_id": "command-terminal-output"
           }
         }

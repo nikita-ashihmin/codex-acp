@@ -257,9 +257,16 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "item-cmd-1",
         "status": "completed",
-        "rawOutput": {
-          "formatted_output": "Added.txt\nREADME.md\n",
-          "exit_code": 0
+        "_meta": {
+          "terminal_output": {
+            "data": "Added.txt\nREADME.md\n",
+            "terminal_id": "item-cmd-1"
+          },
+          "terminal_exit": {
+            "exit_code": 0,
+            "signal": null,
+            "terminal_id": "item-cmd-1"
+          }
         }
       }
     }
@@ -273,8 +280,8 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "item-file-1",
-        "title": "Editing files",
         "kind": "edit",
+        "title": "Editing files",
         "status": "completed",
         "content": [
           {
@@ -322,24 +329,24 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "item-dyn-1",
+        "name": "list_apps",
         "kind": "execute",
         "title": "list_apps",
         "status": "completed",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
+              "text": "Done"
+            }
+          }
+        ],
         "rawInput": {
           "arguments": {
             "includeDisabled": false
           }
-        },
-        "rawOutput": {
-          "contentItems": [
-            {
-              "type": "inputText",
-              "text": "Done"
-            }
-          ],
-          "success": true
-        },
-        "name": "list_apps"
+        }
       }
     }
   ]
@@ -352,8 +359,8 @@
       "update": {
         "sessionUpdate": "tool_call",
         "toolCallId": "item-image-view-1",
-        "kind": "read",
         "name": "view_image",
+        "kind": "read",
         "title": "View Image /test/project/input.png",
         "status": "completed",
         "content": [
@@ -406,12 +413,7 @@
               "uri": "/test/project/generated-blue-square.png"
             }
           }
-        ],
-        "rawOutput": {
-          "status": "completed",
-          "revisedPrompt": "A tiny blue square",
-          "savedPath": "/test/project/generated-blue-square.png"
-        }
+        ]
       }
     }
   ]
@@ -448,9 +450,9 @@
       "sessionId": "session-1",
       "update": {
         "sessionUpdate": "tool_call",
-        "title": "Start subagent test_audit",
-        "kind": "other",
         "toolCallId": "item-subagent-1",
+        "kind": "other",
+        "title": "Start subagent test_audit",
         "status": "completed",
         "rawInput": {
           "agentThreadId": "thread-child-1",
@@ -458,11 +460,10 @@
           "activityKind": "started"
         },
         "_meta": {
-          "codex": {
-            "subagent": {
-              "threadId": "thread-child-1",
-              "path": "/root/test_audit",
-              "activity": "started"
+          "jetbrains": {
+            "air": {
+              "version": 1,
+              "subagent": true
             }
           }
         }

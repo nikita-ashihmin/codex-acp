@@ -109,14 +109,17 @@ The `toolCall` remains the authoritative description of the action:
 
 - `rawInput` contains structured command, working-directory, server, URL, or permission-profile data.
 - `locations` contains affected filesystem paths when Codex provides them.
-- `content` carries details that do not fit a location, such as a network host, filesystem glob, special Codex scope, or MCP message.
+- `content` carries details that do not fit a location, such as a network host, filesystem glob, or special Codex scope.
+- The question of a standalone MCP elicitation is in `rawInput.description`. A client without the AIR `rawInputRendering` capability also gets it as text in `content`.
 - `title`, `kind`, and `status` provide the standard ACP summary.
 
 The `toolCall` is an ACP `ToolCallUpdate`, and the client merges it into the stored tool call.
-When the client already received the command or file-change tool call, the request omits `status`, `kind`, and the generic `title`.
-The request then does not reset a started tool call to `pending`.
-It also omits `rawInput`, unless `rawInput` adds a network URL or additional permissions.
-A network approval keeps its network title.
+The request always carries `toolCallId`, `title`, and `rawInput`, as the [ACP tool call contract](acp-tool-call-contract.md) defines.
+When the client already received the command or file-change tool call, the request omits `status` and `kind`, and the title is the title that the tool call already shows.
+The request then does not reset a started tool call to `pending`, and it does not replace the shown title.
+A network approval has its network title.
+An approval of an MCP tool call that already started carries only `toolCallId` and `status: pending`.
+A Codex plan review carries `_meta.jetbrains.air.planReview = {planItemId}` and does not repeat the plan text.
 
 Command approvals use `kind: execute`. File changes use `kind: edit`. Additional sandbox permissions use `kind: other`. URL authorization fallback uses `kind: fetch`.
 

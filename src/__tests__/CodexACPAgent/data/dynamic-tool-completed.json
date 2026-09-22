@@ -8,15 +8,15 @@
         "toolCallId": "dyn-tool-123",
         "name": "list_apps",
         "status": "completed",
-        "rawOutput": {
-          "contentItems": [
-            {
-              "type": "inputText",
+        "content": [
+          {
+            "type": "content",
+            "content": {
+              "type": "text",
               "text": "Done"
             }
-          ],
-          "success": true
-        }
+          }
+        ]
       }
     }
   ]

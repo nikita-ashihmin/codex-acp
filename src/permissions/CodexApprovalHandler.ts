@@ -27,14 +27,19 @@ import {
     CODEX_NETWORK_PERMISSION_TITLE,
     requestPermissionMeta,
 } from "./metadata";
-import {additionalPermissionsToolCall, commandToolCall, fileChangeToolCall} from "./presentation";
 import type {PermissionPromptContext} from "./lifecycle";
+import {AcpToolCallRenderer} from "../tool-calls/AcpToolCallRenderer";
+import {ClientCapabilities} from "../tool-calls/ClientCapabilities";
+import {CommandReporter} from "../tool-calls/reporters/CommandReporter";
+import {FileChangeReporter} from "../tool-calls/reporters/FileChangeReporter";
+import {SandboxPermissionReporter} from "../tool-calls/reporters/SandboxPermissionReporter";
 
 export class CodexApprovalHandler implements ApprovalHandler {
     constructor(
         private readonly connection: AcpClientConnection,
         private readonly permissionContext: PermissionPromptContext,
         private readonly cancellationSignal?: AbortSignal,
+        private readonly renderer = new AcpToolCallRenderer(ClientCapabilities.DEFAULT),
     ) {}
 
     async handleCommandExecution(
@@ -50,7 +55,11 @@ export class CodexApprovalHandler implements ApprovalHandler {
         try {
             const response = await this.requestPermission({
                 sessionId: params.threadId,
-                toolCall: commandToolCall(authoritativeParams, this.permissionContext),
+                toolCall: this.renderer.renderPermissionToolCall(CommandReporter.permission(
+                    authoritativeParams,
+                    this.permissionContext.commandStarted(params.threadId, params.itemId),
+                    this.permissionContext.commandName(params.threadId, params.itemId),
+                )),
                 options: decisions.map(({option}) => option),
                 _meta: requestPermissionMeta(
                     params.networkApprovalContext ? CODEX_NETWORK_PERMISSION_TITLE : CODEX_COMMAND_PERMISSION_TITLE,
@@ -69,7 +78,10 @@ export class CodexApprovalHandler implements ApprovalHandler {
         try {
             const response = await this.requestPermission({
                 sessionId: params.threadId,
-                toolCall: fileChangeToolCall(params, this.permissionContext),
+                toolCall: this.renderer.renderPermissionToolCall(FileChangeReporter.permission(
+                    params,
+                    this.permissionContext.fileChange(params.threadId, params.itemId),
+                )),
                 options: decisions.map(({option}) => option),
                 _meta: requestPermissionMeta(CODEX_FILE_CHANGE_PERMISSION_TITLE, params.reason),
             });
@@ -86,12 +98,12 @@ export class CodexApprovalHandler implements ApprovalHandler {
         try {
             const response = await this.requestPermission({
                 sessionId: params.threadId,
-                toolCall: additionalPermissionsToolCall(
+                toolCall: this.renderer.renderPermissionToolCall(SandboxPermissionReporter.permission(
                     params.itemId,
                     params.cwd,
                     params.environmentId,
                     params.permissions,
-                ),
+                )),
                 options: permissionProfileOptions(),
                 _meta: requestPermissionMeta(CODEX_ADDITIONAL_PERMISSIONS_TITLE, params.reason),
             });

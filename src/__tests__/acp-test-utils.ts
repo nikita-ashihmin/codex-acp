@@ -19,6 +19,7 @@ import {CodexSubagentEventRouter} from "../subagents/CodexSubagentEventRouter";
 import {CodexBackgroundTerminalTasks} from "../async-tasks/CodexBackgroundTerminalTasks";
 import {CodexSessionCompactions} from "../CodexSessionCompactions";
 import {AUTH_STATUS_UPDATE_METHOD} from "../AuthStatusMeta";
+import {ClientCapabilities} from "../tool-calls/ClientCapabilities";
 
 export type MethodCallEvent = { method: string; args: any[] };
 
@@ -419,8 +420,7 @@ export function createTestSessionState(overrides?: Partial<SessionState>): Sessi
         collaborationMode: DEFAULT_COLLABORATION_MODE,
         fastModeEnabled: false,
         currentModelSupportsFast: false,
-        terminalOutputMode: "terminal_output_delta",
-        commandOutputChannel: "terminal",
+        clientCapabilities: ClientCapabilities.DEFAULT.with({terminalOutputDelta: true}),
         goalRevision: 0,
         sessionTitle: null,
         sessionTitleSource: "unknown",

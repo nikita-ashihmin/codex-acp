@@ -1,8 +1,10 @@
 import {describe, expect, it} from "vitest";
 import type {ServerNotification} from "../../app-server";
 import type {ThreadItem} from "../../app-server/v2";
-import {CodexEventHandler} from "../../CodexEventHandler";
-import {createCommandExecutionCompleteUpdate} from "../../CodexToolCallMapper";
+import {AcpToolCallRenderer} from "../../tool-calls/AcpToolCallRenderer";
+import {ClientCapabilities} from "../../tool-calls/ClientCapabilities";
+import {CommandReporter} from "../../tool-calls/reporters/CommandReporter";
+import {McpStartupReporter} from "../../tool-calls/reporters/McpStartupReporter";
 import {parseResponseItemHistoryFallback} from "../../ResponseItemHistoryFallback";
 import {createCodexMockTestFixture, createTestSessionState, setupPromptAndSendNotifications} from "../acp-test-utils";
 
@@ -32,16 +34,18 @@ function occurrences(value: unknown, text: string): number {
     return serialized.split(JSON.stringify(text).slice(1, -1)).length - 1;
 }
 
-describe("command output is sent once", () => {
-    it("replays the output only in the terminal metadata for a terminal channel client", () => {
-        const update = createCommandExecutionCompleteUpdate(command(), {
-            terminalOutputMode: "terminal_output_delta",
-            channel: "terminal",
-            hasTerminal: true,
-            outputStreamed: false,
-        });
+const DELTA_CLIENT = ClientCapabilities.DEFAULT.with({terminalOutputDelta: true});
+const ZED_CLIENT = ClientCapabilities.DEFAULT;
 
-        expect(update).toEqual({
+function completion(item: CommandItem, capabilities: ClientCapabilities) {
+    const reporter = new CommandReporter();
+    reporter.started({...item, status: "inProgress"});
+    return new AcpToolCallRenderer(capabilities).render(reporter.completed(item));
+}
+
+describe("command output is sent once", () => {
+    it("sends the output as terminal_output_delta to a client with output deltas", () => {
+        expect(completion(command(), DELTA_CLIENT)).toEqual({
             sessionUpdate: "tool_call_update",
             toolCallId: "cmd-1",
             status: "completed",
@@ -52,32 +56,35 @@ describe("command output is sent once", () => {
         });
     });
 
-    it("sends the output and the exit code only in the raw output for a client without terminal metadata", () => {
-        const update = createCommandExecutionCompleteUpdate(command(), {
-            terminalOutputMode: "terminal_output_delta",
-            channel: "rawOutput",
-            hasTerminal: true,
-            outputStreamed: false,
-        });
+    it("keeps the Zed terminal conventions for a client without output deltas", () => {
+        const renderer = new AcpToolCallRenderer(ZED_CLIENT);
+        const reporter = new CommandReporter();
+        const start = renderer.render(reporter.started(command({status: "inProgress", aggregatedOutput: null, exitCode: null})));
+        const chunk = renderer.render(reporter.outputDelta("cmd-1", "a.txt\nb.txt\n")!);
+        const end = renderer.render(reporter.completed(command()));
 
-        expect(update).toEqual({
+        expect(start).toMatchObject({
+            content: [{type: "terminal", terminalId: "cmd-1"}],
+            _meta: {terminal_info: {cwd: "/workspace", terminal_id: "cmd-1"}},
+        });
+        expect(chunk).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            _meta: {terminal_output: {data: "a.txt\nb.txt\n", terminal_id: "cmd-1"}},
+        });
+        expect(end).toEqual({
             sessionUpdate: "tool_call_update",
             toolCallId: "cmd-1",
             status: "completed",
-            rawOutput: {formatted_output: "a.txt\nb.txt\n", exit_code: 0},
+            _meta: {terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-1"}},
         });
     });
 
     it("sends the output of a read command once in the content", () => {
-        for (const channel of ["terminal", "rawOutput"] as const) {
-            const update = createCommandExecutionCompleteUpdate(command({
+        for (const capabilities of [DELTA_CLIENT, ZED_CLIENT]) {
+            const update = completion(command({
                 commandActions: [{type: "read", command: "cat a.txt", name: "a.txt", path: "/workspace/a.txt"}],
-            }), {
-                terminalOutputMode: "terminal_output_delta",
-                channel,
-                hasTerminal: false,
-                outputStreamed: false,
-            });
+            }), capabilities);
 
             expect(update).toEqual({
                 sessionUpdate: "tool_call_update",
@@ -88,13 +95,25 @@ describe("command output is sent once", () => {
         }
     });
 
-    it("sends the live output only as streamed deltas to a terminal channel client", async () => {
+    it("sends stdin as terminal_input and not as output", () => {
+        const renderer = new AcpToolCallRenderer(DELTA_CLIENT);
+        const reporter = new CommandReporter();
+        reporter.started(command({status: "inProgress"}));
+
+        expect(renderer.render(reporter.terminalInput("cmd-1", "yes")!)).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            _meta: {terminal_input: {data: "yes", terminal_id: "cmd-1"}},
+        });
+    });
+
+    it("sends the live output only as streamed deltas", async () => {
         const fixture = createCodexMockTestFixture();
         const sessionId = "command-once";
         await setupPromptAndSendNotifications(
             fixture,
             sessionId,
-            createTestSessionState({sessionId, commandOutputChannel: "terminal"}),
+            createTestSessionState({sessionId, clientCapabilities: DELTA_CLIENT}),
             liveCommand(sessionId),
         );
 
@@ -102,22 +121,24 @@ describe("command output is sent once", () => {
         expect(occurrences(dump, "a.txt\nb.txt\n")).toBe(1);
         expect(dump).toContain("terminal_output_delta");
         expect(dump).not.toContain("formatted_output");
+        expect(dump).not.toContain("exit_code\": 0,\n        \"formatted");
     });
 
-    it("sends the live output only in the final raw output to a client without terminal metadata", async () => {
+    it("sends the live output of a Zed-like client only as terminal_output chunks", async () => {
         const fixture = createCodexMockTestFixture();
-        const sessionId = "command-once-raw";
+        const sessionId = "command-once-zed";
         await setupPromptAndSendNotifications(
             fixture,
             sessionId,
-            createTestSessionState({sessionId, commandOutputChannel: "rawOutput"}),
+            createTestSessionState({sessionId, clientCapabilities: ZED_CLIENT}),
             liveCommand(sessionId),
         );
 
         const dump = fixture.getAcpConnectionDump([]);
         expect(occurrences(dump, "a.txt\nb.txt\n")).toBe(1);
-        expect(dump).not.toContain("terminal_output_delta");
-        expect(dump).not.toContain("terminal_exit");
+        expect(dump).toContain("\"terminal_output\"");
+        expect(dump).toContain("terminal_exit");
+        expect(dump).not.toContain("rawOutput");
     });
 
     it("sends the streamed output of a read command once in the content", async () => {
@@ -127,32 +148,29 @@ describe("command output is sent once", () => {
         await setupPromptAndSendNotifications(
             fixture,
             sessionId,
-            createTestSessionState({sessionId, commandOutputChannel: "terminal"}),
+            createTestSessionState({sessionId}),
             liveCommand(sessionId, read),
         );
 
         const dump = fixture.getAcpConnectionDump([]);
         expect(occurrences(dump, "a.txt\nb.txt\n")).toBe(1);
         expect(dump).not.toContain("terminal_output_delta");
-        expect(dump).not.toContain("formatted_output");
         expect(dump).toContain("\"content\"");
     });
 
-    it("replays fallback history output in one channel", () => {
+    it("replays fallback history output only in the terminal channel", () => {
         const jsonl = [
             {type: "response_item", payload: {type: "function_call", name: "exec_command", call_id: "call-1", arguments: JSON.stringify({cmd: "npm test", workdir: "/workspace", yield_time_ms: 1000})}},
             {type: "response_item", payload: {type: "function_call_output", call_id: "call-1", output: "Process exited with code 0\nOutput:\nfallback-output\n"}},
         ].map(line => JSON.stringify(line)).join("\n");
 
-        const terminalUpdates = parseResponseItemHistoryFallback(jsonl, "terminal_output_delta", new Set(), "terminal");
-        const rawUpdates = parseResponseItemHistoryFallback(jsonl, "terminal_output_delta", new Set(), "rawOutput");
-
-        const terminalOutput = terminalUpdates?.find(update => update.sessionUpdate === "tool_call_update");
-        expect(terminalOutput).not.toHaveProperty("rawOutput");
-        expect(occurrences(terminalOutput, "fallback-output")).toBe(1);
-        const rawOutput = rawUpdates?.find(update => update.sessionUpdate === "tool_call_update");
-        expect(rawOutput).toHaveProperty("rawOutput.formatted_output");
-        expect(rawOutput).not.toHaveProperty("_meta");
+        for (const capabilities of [DELTA_CLIENT, ZED_CLIENT]) {
+            const output = parseResponseItemHistoryFallback(jsonl, capabilities)
+                ?.find(update => update.sessionUpdate === "tool_call_update");
+            expect(output).not.toHaveProperty("rawOutput");
+            expect(occurrences(output, "fallback-output")).toBe(1);
+            expect(output).toHaveProperty("_meta.terminal_exit");
+        }
     });
 });
 
@@ -207,9 +225,9 @@ describe("late output deltas", () => {
 describe("MCP startup tool call ids", () => {
     it("gives each startup report a unique tool call id", () => {
         const event = {ready: [], failed: [{server: "broken", error: "boom", failureReason: null}], cancelled: ["slow"]};
-        const first = CodexEventHandler.createMcpStartupUpdates(event as never);
-        const second = CodexEventHandler.createMcpStartupUpdates(event as never);
-        const ids = [...first, ...second].map(update => update.sessionUpdate === "tool_call" ? update.toolCallId : "");
+        const first = McpStartupReporter.failures(event as never);
+        const second = McpStartupReporter.failures(event as never);
+        const ids = [...first, ...second].map(facts => facts.toolCallId);
 
         expect(new Set(ids).size).toBe(4);
         expect(ids[0]).toMatch(/^mcp_startup\.broken\./);
