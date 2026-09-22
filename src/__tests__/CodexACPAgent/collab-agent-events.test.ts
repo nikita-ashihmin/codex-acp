@@ -1537,7 +1537,7 @@ describe("CodexEventHandler - collab agent tool call events", () => {
         expect(nestedSpawn?.args[0].sessionId).toBe("parent-thread:generation:2");
     });
 
-    it("bounds notifications buffered before a child is announced", async () => {
+    it("keeps every notification buffered before a child is announced", async () => {
         const router = new CodexSubagentEventRouter(
             sessionId,
             true,
@@ -1591,8 +1591,8 @@ describe("CodexEventHandler - collab agent tool call events", () => {
         });
 
         const buffered = router.takeBufferedNotifications();
-        expect(buffered).toHaveLength(256);
-        expect((buffered[0]!.params as {itemId: string}).itemId).toBe("buffered-44");
+        expect(buffered).toHaveLength(300);
+        expect((buffered[0]!.params as {itemId: string}).itemId).toBe("buffered-0");
     });
 
     it("publishes a terminal child state exactly once under concurrent completion", async () => {
