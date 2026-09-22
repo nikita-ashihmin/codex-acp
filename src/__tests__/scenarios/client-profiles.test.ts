@@ -1,0 +1,474 @@
+import {beforeAll, describe, expect, it} from "vitest";
+import {schemaErrors} from "./acp-schema";
+import {AIR_CAPABILITY_NAMES, normalize, PROFILES, type ProfileName, type RecordedMessage, runScenario} from "./scenario-harness";
+import {SCENARIOS, type Scenario} from "./scenarios";
+
+const PROFILE_NAMES: ProfileName[] = ["plain", "zed", "air"];
+
+type Update = Record<string, any>;
+
+/** The recorded messages of every scenario for every profile. The scenarios run once per file. */
+const recordings = new Map<string, RecordedMessage[]>();
+
+function scenario(name: string): Scenario {
+    const found = SCENARIOS.find(candidate => candidate.name === name);
+    if (found === undefined) throw new Error(`No scenario ${name}`);
+    return found;
+}
+
+function recording(profile: ProfileName, name: string): RecordedMessage[] {
+    const messages = recordings.get(`${profile}/${name}`);
+    if (messages === undefined) throw new Error(`No recording ${profile}/${name}`);
+    return messages;
+}
+
+function updates(profile: ProfileName, name: string, toolCallId?: string): Update[] {
+    return recording(profile, name)
+        .filter(message => message.method === "session/update")
+        .map(message => (message.params as {update: Update}).update)
+        .filter(update => toolCallId === undefined || update["toolCallId"] === toolCallId);
+}
+
+function permissionRequests(profile: ProfileName, name: string): Update[] {
+    return recording(profile, name)
+        .filter(message => message.method === "session/request_permission")
+        .map(message => message.params as Update);
+}
+
+function response(profile: ProfileName, name: string, method: string): Update {
+    const found = recording(profile, name).find(message => message.direction === "response" && message.method === method);
+    if (found === undefined) throw new Error(`No ${method} response in ${profile}/${name}`);
+    return found.params as Update;
+}
+
+type MetaObject = {meta: Record<string, unknown>; owner: Record<string, unknown>};
+
+/** Every `_meta` object of the messages with the object that holds it, except inside `rawInput` and `rawOutput`. */
+function metaObjects(value: unknown): MetaObject[] {
+    if (value === null || typeof value !== "object") return [];
+    if (Array.isArray(value)) return value.flatMap(metaObjects);
+    const owner = value as Record<string, unknown>;
+    return Object.entries(owner).flatMap(([key, child]) => {
+        if (key === "rawInput" || key === "rawOutput") return [];
+        if (key === "_meta" && child !== null && typeof child === "object") {
+            return [{meta: child as Record<string, unknown>, owner}, ...metaObjects(child)];
+        }
+        return metaObjects(child);
+    });
+}
+
+/**
+ * The metadata keys that exist only for AIR, including the keys that AIR used before `_meta.jetbrains.air`.
+ * The `kind` of a diff is the ACP diff kind, not the AIR mode kind.
+ */
+function airOnlyKeys({meta, owner}: MetaObject): string[] {
+    const codex = meta["codex"] as Record<string, unknown> | undefined;
+    const keys = ["jetbrains", "goal", "commandAction", "permission", "contextCompaction",
+        ...(owner["type"] === "diff" ? [] : ["kind"])];
+    return [
+        ...keys.filter(key => key in meta),
+        ...["phase", "subagent", "collaboration", "kind", "planItemId"]
+            .filter(key => codex !== undefined && key in codex)
+            .map(key => `codex.${key}`),
+    ];
+}
+
+beforeAll(async () => {
+    for (const profile of PROFILE_NAMES) {
+        for (const each of SCENARIOS) {
+            recordings.set(`${profile}/${each.name}`, normalize(await runScenario(each, profile)));
+        }
+    }
+}, 120_000);
+
+describe("scenario golden snapshots", () => {
+    for (const profile of PROFILE_NAMES) {
+        for (const each of SCENARIOS) {
+            it(`${profile}: ${each.name}`, async () => {
+                await expect(`${JSON.stringify(recording(profile, each.name), null, 2)}\n`)
+                    .toMatchFileSnapshot(`data/${profile}/${each.name}.json`);
+            });
+        }
+    }
+});
+
+describe("ACP schema", () => {
+    for (const profile of PROFILE_NAMES) {
+        it(`accepts every outbound message of the ${profile} profile`, () => {
+            const errors = SCENARIOS.flatMap(each => recording(profile, each.name)
+                .flatMap(message => schemaErrors(message).map(error => `${each.name} ${message.method}: ${error}`)));
+            expect(errors).toEqual([]);
+        });
+    }
+
+    it("rejects an invalid tool call", () => {
+        expect(schemaErrors({
+            direction: "notify",
+            method: "session/update",
+            params: {sessionId: "s", update: {sessionUpdate: "tool_call", toolCallId: "t", title: "t", status: "done"}},
+        })).not.toEqual([]);
+    });
+});
+
+describe("clients that are not AIR", () => {
+    for (const profile of ["plain", "zed"] as const) {
+        it(`${profile}: gets no AIR-only metadata key`, () => {
+            const found = SCENARIOS.flatMap(each => metaObjects(recording(profile, each.name))
+                .flatMap(meta => airOnlyKeys(meta).map(key => `${each.name}: ${key}`)));
+            expect(found).toEqual([]);
+        });
+
+        it(`${profile}: gets no terminal_output_delta and no terminal_input, because it declares neither`, () => {
+            const found = SCENARIOS.flatMap(each => metaObjects(recording(profile, each.name))
+                .filter(({meta}) => "terminal_output_delta" in meta || "terminal_input" in meta)
+                .map(() => each.name));
+            expect(found).toEqual([]);
+        });
+
+        it(`${profile}: gets no session_info_update for a goal`, () => {
+            expect(updates(profile, "goal-update").filter(update => update["sessionUpdate"] === "session_info_update"))
+                .toEqual([{sessionUpdate: "session_info_update", title: "Go"}]);
+        });
+
+        it(`${profile}: gets the output and the exit code of every command in rawOutput`, () => {
+            const ends = [
+                ...updates(profile, "command-output-stdin", "cmd-1"),
+                ...updates(profile, "read-search-list"),
+                ...updates(profile, "command-failed", "cmd-3"),
+            ].filter(update => update["status"] === "completed" || update["status"] === "failed");
+            expect(ends.map(update => update["rawOutput"])).toEqual([
+                {formatted_output: "Running tests\n1 passed\n", exit_code: 0},
+                {formatted_output: "export const a = 1;\n", exit_code: 0},
+                {formatted_output: "src/app.ts:3: // TODO\n", exit_code: 0},
+                {formatted_output: "app.ts\n", exit_code: 0},
+                {formatted_output: "cat: missing.txt: No such file\n", exit_code: 1},
+            ]);
+            expect(ends.every(update => update["content"] === undefined)).toBe(true);
+        });
+
+        it(`${profile}: gets the full item fields of the tool kinds that AIR reports in another shape`, () => {
+            expect(updates(profile, "mcp-tool", "mcp-1").at(-1)).toMatchObject({
+                rawOutput: {result: {content: [{type: "text", text: "3 hits"}], structuredContent: {hits: 3}}, error: null},
+            });
+            expect(updates(profile, "mcp-tool", "mcp-1").at(-1)).not.toHaveProperty("content");
+            expect(updates(profile, "web-search", "web-1")[0]!["rawInput"])
+                .toEqual({type: "webSearch", id: "web-1", query: "", action: null});
+            expect(updates(profile, "collab-agent", "collab-1")[0]!["rawInput"]).toMatchObject({
+                prompt: "Find the weather in Paris.",
+                agentsStates: {"child-thread": {status: "running", message: "Checking"}},
+                status: "inProgress",
+            });
+            expect(updates(profile, "collab-agent", "collab-1")[0]).not.toHaveProperty("content");
+            expect(updates(profile, "guardian-review")[0]!["content"]).toEqual([{
+                type: "content",
+                content: {
+                    type: "text",
+                    text: "Status: In progress\nAction: shell rm -rf build\nRisk: medium\nAuthorization: unknown\nRationale: Checking.",
+                },
+            }]);
+            expect(updates(profile, "image-generation", "gen-1")[0]!["rawInput"]).toEqual({id: "gen-1"});
+            expect(permissionRequests(profile, "plan-review-permission")[0]!["toolCall"]["rawInput"])
+                .toEqual({plan: "# Plan\n\n1. Make the change."});
+        });
+
+        it(`${profile}: gets the plan once when the plan completes`, () => {
+            expect(updates(profile, "plan-stream").filter(update => update["sessionUpdate"] === "agent_message_chunk"))
+                .toEqual([{
+                    sessionUpdate: "agent_message_chunk",
+                    messageId: "plan-3",
+                    content: {type: "text", text: "# Plan\n\n1. Read.\n2. Write."},
+                }]);
+        });
+
+        it(`${profile}: gets the pre-contract permission request of a started command`, () => {
+            expect(permissionRequests(profile, "command-approval")[0]).toEqual(expect.objectContaining({
+                toolCall: {
+                    toolCallId: "cmd-a",
+                    kind: "execute",
+                    status: "pending",
+                    title: "Run command",
+                    rawInput: {command: "npm install", cwd: "/workspace"},
+                },
+            }));
+            expect(permissionRequests(profile, "command-approval")[0]).not.toHaveProperty("_meta");
+        });
+    }
+});
+
+describe("plain ACP client", () => {
+    it("declares no terminal channel, so it gets no output chunks and sees the output when the command ends", () => {
+        expect(updates("plain", "command-output-stdin", "cmd-1")).toEqual([
+            expect.objectContaining({sessionUpdate: "tool_call", content: [{type: "terminal", terminalId: "cmd-1"}]}),
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                status: "completed",
+                rawOutput: {formatted_output: "Running tests\n1 passed\n", exit_code: 0},
+                _meta: {terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-1"}},
+            },
+        ]);
+    });
+
+    it("sees the output of a replayed command", () => {
+        expect(updates("plain", "history-replay", "h-cmd").at(-1)).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "h-cmd",
+            rawOutput: {formatted_output: "1 passed\n", exit_code: 0},
+            _meta: {terminal_exit: {exit_code: 0, signal: null, terminal_id: "h-cmd"}},
+        });
+    });
+});
+
+describe("Zed", () => {
+    it("declares terminal_output", () => {
+        expect(PROFILES.zed._meta).toMatchObject({terminal_output: true});
+    });
+
+    it("gets terminal_info and the terminal content block on the command tool call", () => {
+        expect(updates("zed", "command-output-stdin", "cmd-1")[0]).toEqual({
+            sessionUpdate: "tool_call",
+            toolCallId: "cmd-1",
+            kind: "execute",
+            title: "npm test",
+            status: "in_progress",
+            content: [{type: "terminal", terminalId: "cmd-1"}],
+            rawInput: {command: "npm test", cwd: "/workspace"},
+            _meta: {terminal_info: {cwd: "/workspace", terminal_id: "cmd-1"}},
+        });
+    });
+
+    it("gets terminal_output chunks, the stdin on its own line, and terminal_exit at the end", () => {
+        expect(updates("zed", "command-output-stdin", "cmd-1").slice(1)).toEqual([
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output: {data: "Running tests\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output: {data: "\ny\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output: {data: "1 passed\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                status: "completed",
+                rawOutput: {formatted_output: "Running tests\n1 passed\n", exit_code: 0},
+                _meta: {terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-1"}},
+            },
+        ]);
+    });
+
+    it("gets the output of a command that did not stream in one terminal_output chunk at the end", () => {
+        expect(updates("zed", "command-without-streamed-output", "cmd-2").at(-1)).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-2",
+            status: "completed",
+            rawOutput: {formatted_output: "a.txt\nb.txt\n", exit_code: 0},
+            _meta: {
+                terminal_output: {data: "a.txt\nb.txt\n", terminal_id: "cmd-2"},
+                terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-2"},
+            },
+        });
+    });
+
+    it("gets a replayed command with terminal_output and terminal_exit", () => {
+        const replayed = updates("zed", "history-replay", "h-cmd");
+        expect(replayed[0]).toMatchObject({
+            content: [{type: "terminal", terminalId: "h-cmd"}],
+            _meta: {terminal_info: {cwd: "/workspace", terminal_id: "h-cmd"}},
+        });
+        expect(replayed.at(-1)!["_meta"]).toEqual({
+            terminal_output: {data: "1 passed\n", terminal_id: "h-cmd"},
+            terminal_exit: {exit_code: 0, signal: null, terminal_id: "h-cmd"},
+        });
+    });
+
+    it("gets no terminal chunks for a read command, because it shows no terminal", () => {
+        expect(updates("zed", "read-search-list", "read-1").map(update => update["_meta"])).toEqual([undefined, undefined]);
+    });
+
+    it("keeps is_mcp_tool_call and mcp_output_delta", () => {
+        const mcp = updates("zed", "mcp-tool", "mcp-1");
+        expect(mcp[0]!["_meta"]).toEqual({is_mcp_tool_call: true});
+        expect(mcp[1]!["_meta"]).toEqual({mcp_output_delta: {data: "  fetching page 1\n"}});
+    });
+});
+
+describe("AIR", () => {
+    it("declares the AIR extension with every capability that the adapter knows and terminal_output_delta", () => {
+        expect(PROFILES.air._meta).toMatchObject({
+            terminal_output_delta: true,
+            jetbrains: {air: {version: 1, capabilities: AIR_CAPABILITY_NAMES}},
+        });
+        const air = response("air", "command-output-stdin", "initialize")["_meta"]["jetbrains"]["air"];
+        expect(air).toEqual({
+            version: 1,
+            goal: {version: 1, controlMethod: "_session/goal", actions: ["set", "pause", "resume", "clear"]},
+            capabilities: expect.any(Array),
+        });
+        expect([...air["capabilities"]].sort()).toEqual([...AIR_CAPABILITY_NAMES].sort());
+    });
+
+    it("gets terminal_output_delta chunks, the raw stdin in terminal_input, and terminal_exit without rawOutput", () => {
+        expect(updates("air", "command-output-stdin", "cmd-1").slice(1)).toEqual([
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output_delta: {data: "Running tests\n", terminal_id: "cmd-1"}},
+            },
+            {sessionUpdate: "tool_call_update", toolCallId: "cmd-1", _meta: {terminal_input: {data: "y", terminal_id: "cmd-1"}}},
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output_delta: {data: "1 passed\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                status: "completed",
+                _meta: {terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-1"}},
+            },
+        ]);
+    });
+
+    it("gets the output of a read, search or list command once, in content", () => {
+        const ends = updates("air", "read-search-list").filter(update => update["status"] === "completed");
+        expect(ends.map(update => [update["content"], update["rawOutput"], update["_meta"]])).toEqual([
+            [[{type: "content", content: {type: "text", text: "export const a = 1;\n"}}], undefined, undefined],
+            [[{type: "content", content: {type: "text", text: "src/app.ts:3: // TODO\n"}}], undefined, undefined],
+            [[{type: "content", content: {type: "text", text: "app.ts\n"}}], undefined, undefined],
+        ]);
+    });
+
+    it("gets the AIR keys in _meta.jetbrains.air", () => {
+        const air = (meta: unknown) => (meta as {jetbrains: {air: Record<string, unknown>}}).jetbrains.air;
+        const message = updates("air", "agent-message-and-reasoning")
+            .find(update => update["sessionUpdate"] === "agent_message_chunk" && update["_meta"] !== undefined);
+        expect(air(message!["_meta"])).toEqual({version: 1, phase: "final_answer"});
+        expect(updates("air", "goal-update").filter(update => update["_meta"] !== undefined).map(update => air(update["_meta"])))
+            .toEqual([
+                {version: 1, goal: expect.objectContaining({objective: "Ship it", status: "active"})},
+                {version: 1, goal: null},
+            ]);
+        const newSession = response("air", "command-output-stdin", "session/new");
+        expect(air(newSession["modes"]["availableModes"][0]["_meta"])).toEqual({version: 1, kind: "standard"});
+        expect(air(newSession["configOptions"][0]["options"][0]["_meta"])).toEqual({version: 1, kind: "standard"});
+        const commands = updates("air", "history-replay")
+            .find(update => update["sessionUpdate"] === "available_commands_update")!["availableCommands"];
+        expect(air(commands[0]["_meta"])).toEqual({
+            version: 1,
+            commandAction: {
+                kind: "setConfigOption",
+                configId: "collaboration_mode",
+                value: "plan",
+                resetValue: "default",
+                presentation: "state",
+            },
+        });
+        const permission = permissionRequests("air", "command-approval")[0]!;
+        expect(air(permission["_meta"])).toEqual({
+            version: 1,
+            permission: {version: 1, title: "Run command?", description: "Install the dependencies."},
+        });
+        expect(air(updates("air", "context-compaction", "compact-1")[0]!["_meta"]))
+            .toEqual({version: 1, contextCompaction: {version: 1}});
+        const review = permissionRequests("air", "plan-review-permission")[0]!;
+        expect(air(review["_meta"])).toEqual({version: 1, planReview: {planItemId: "plan-2"}});
+        expect(review["toolCall"]).not.toHaveProperty("rawInput");
+    });
+
+    it("gets a streamed plan as plan_update snapshots and _meta.jetbrains.air.contentDelta appends", () => {
+        expect(updates("air", "plan-stream").filter(update => update["sessionUpdate"] === "plan_update")).toEqual([
+            {sessionUpdate: "plan_update", plan: {type: "markdown", planId: "plan-3", content: "# Plan\n\n"}},
+            {
+                sessionUpdate: "plan_update",
+                plan: {type: "markdown", planId: "plan-3", content: ""},
+                _meta: {jetbrains: {air: {version: 1, contentDelta: "1. Read."}}},
+            },
+            {
+                sessionUpdate: "plan_update",
+                plan: {type: "markdown", planId: "plan-3", content: ""},
+                _meta: {jetbrains: {air: {version: 1, contentDelta: "\n2. Write."}}},
+            },
+        ]);
+    });
+
+    it("gets _meta.jetbrains.air.subagent on a subagent tool call without native subagent sessions", async () => {
+        const capabilities = {
+            ...PROFILES.air,
+            _meta: {
+                terminal_output_delta: true,
+                jetbrains: {air: {version: 1, capabilities: AIR_CAPABILITY_NAMES.filter(name => name !== "nativeSubagentSessions")}},
+            },
+        };
+        const messages = normalize(await runScenario(scenario("collab-agent"), capabilities));
+        const started = messages.map(message => (message.params as {update?: Update}).update)
+            .find(update => update?.["toolCallId"] === "collab-1");
+        expect(started).toEqual({
+            sessionUpdate: "tool_call",
+            toolCallId: "collab-1",
+            kind: "other",
+            title: "spawnAgent",
+            status: "in_progress",
+            rawInput: {
+                prompt: "Find the weather in Paris.",
+                senderThreadId: "session-1",
+                receiverThreadIds: ["child-thread"],
+                model: null,
+                reasoningEffort: null,
+            },
+            rawOutput: {agentsStates: {"child-thread": {status: "running", message: "Checking"}}},
+            _meta: {jetbrains: {air: {version: 1, subagent: true}}},
+        });
+    });
+
+    it("gets no key of the pre-contract shape", () => {
+        const text = SCENARIOS.map(each => JSON.stringify(recording("air", each.name))).join("\n");
+        expect(text).not.toContain("formatted_output");
+        expect(text).not.toContain("\"codex\"");
+        expect(text).not.toContain("diffStats");
+        expect(text).not.toContain("\"terminal_output\"");
+    });
+
+    it("gets no tool call field twice with the same value", () => {
+        const repeated: string[] = [];
+        for (const each of SCENARIOS) {
+            const reported = new Map<string, Map<string, string>>();
+            // The client merges the tool call of a permission request like an update.
+            // The request itself carries the title and the parameters on purpose, so only updates are checked.
+            const reports = recording("air", each.name).flatMap((message): Update[] => {
+                if (message.method === "session/update") return [(message.params as {update: Update}).update];
+                if (message.method === "session/request_permission") {
+                    return [{sessionUpdate: "permission", ...(message.params as Update)["toolCall"]}];
+                }
+                return [];
+            });
+            for (const update of reports) {
+                if (update["sessionUpdate"] === "permission") {
+                    const fields = reported.get(update["toolCallId"]) ?? new Map<string, string>();
+                    reported.set(update["toolCallId"], fields);
+                    for (const [name, value] of Object.entries(update)) fields.set(name, JSON.stringify(value));
+                    continue;
+                }
+                if (update["sessionUpdate"] !== "tool_call" && update["sessionUpdate"] !== "tool_call_update") continue;
+                const fields = update["sessionUpdate"] === "tool_call"
+                    ? new Map<string, string>()
+                    : reported.get(update["toolCallId"]) ?? new Map<string, string>();
+                reported.set(update["toolCallId"], fields);
+                for (const name of ["title", "kind", "status", "content", "locations", "rawInput", "rawOutput"]) {
+                    if (update[name] === undefined) continue;
+                    const value = JSON.stringify(update[name]);
+                    if (fields.get(name) === value) repeated.push(`${each.name} ${update["toolCallId"]} ${name}`);
+                    fields.set(name, value);
+                }
+            }
+        }
+        expect(repeated).toEqual([]);
+    });
+});
