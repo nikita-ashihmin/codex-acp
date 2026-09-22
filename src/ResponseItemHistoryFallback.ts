@@ -42,6 +42,7 @@ function historyFallbackUpdateKey(update: UpdateSessionEvent): string | null {
 export async function createResponseItemHistoryFallbackUpdates(
     thread: Thread,
     terminalOutputMode: TerminalOutputMode,
+    terminalOutputDeltaSupported = false,
 ): Promise<UpdateSessionEvent[] | null> {
     if (!thread.path) {
         return null;
@@ -54,13 +55,19 @@ export async function createResponseItemHistoryFallbackUpdates(
         return null;
     }
 
-    return parseResponseItemHistoryFallback(contents, terminalOutputMode, toolCallIdsFromThread(thread));
+    return parseResponseItemHistoryFallback(
+        contents,
+        terminalOutputMode,
+        toolCallIdsFromThread(thread),
+        terminalOutputDeltaSupported,
+    );
 }
 
 export function parseResponseItemHistoryFallback(
     contents: string,
     terminalOutputMode: TerminalOutputMode,
     existingToolCallIds: Set<string> = new Set(),
+    terminalOutputDeltaSupported = false,
 ): UpdateSessionEvent[] | null {
     const updates: UpdateSessionEvent[] = [];
     const terminalToolCallIds = new Set<string>();
@@ -139,6 +146,7 @@ export function parseResponseItemHistoryFallback(
                     terminalOutputMode,
                     terminalToolCallIds,
                     execToolCallIds,
+                    terminalOutputDeltaSupported,
                 );
                 if (update) {
                     pushUpdates([update]);
@@ -413,6 +421,7 @@ function createFunctionCallOutputUpdate(
     terminalOutputMode: TerminalOutputMode,
     terminalToolCallIds: Set<string>,
     execToolCallIds: Set<string>,
+    terminalOutputDeltaSupported: boolean,
 ): UpdateSessionEvent | null {
     const toolCallId = stringValue(item["call_id"]);
     if (!toolCallId) {
@@ -446,10 +455,13 @@ function createFunctionCallOutputUpdate(
         sessionUpdate: "tool_call_update",
         toolCallId,
         status,
-        rawOutput: {
-            formatted_output: output,
-            exit_code: exitCode,
-        },
+        // A client with terminal output deltas reads the output from the terminal metadata only.
+        ...(terminalOutputDeltaSupported ? {} : {
+            rawOutput: {
+                formatted_output: output,
+                exit_code: exitCode,
+            },
+        }),
         _meta: meta,
     };
 }

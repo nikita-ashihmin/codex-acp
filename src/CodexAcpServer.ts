@@ -82,6 +82,7 @@ import {
     type SessionSteerRequest,
 } from "./AcpExtensions";
 import {
+    commandExecutionUsesTerminalOutput,
     createCollabAgentToolCallUpdate,
     createCommandExecutionCompleteUpdate,
     createCommandExecutionUpdate,
@@ -2016,6 +2017,7 @@ export class CodexAcpServer {
         const responseItemFallbackUpdates = await createResponseItemHistoryFallbackUpdates(
             thread,
             sessionState.terminalOutputMode,
+            sessionState.terminalOutputDeltaSupported,
         );
 
         const threadUpdates: UpdateSessionEvent[] = [];
@@ -2274,9 +2276,13 @@ export class CodexAcpServer {
                 )];
             case "commandExecution": {
                 const updates = [await createCommandExecutionUpdate(item)];
-                const completeUpdate = createCommandExecutionCompleteUpdate(item, sessionState.terminalOutputMode);
-                if (completeUpdate) {
-                    updates.push(completeUpdate);
+                if (item.status !== "inProgress") {
+                    updates.push(createCommandExecutionCompleteUpdate(item, {
+                        terminalOutputMode: sessionState.terminalOutputMode,
+                        terminalOutputDeltaSupported: sessionState.terminalOutputDeltaSupported,
+                        hasTerminal: commandExecutionUsesTerminalOutput(item),
+                        outputStreamed: false,
+                    }));
                 }
                 return updates;
             }

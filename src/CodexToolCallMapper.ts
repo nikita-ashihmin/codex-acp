@@ -106,41 +106,62 @@ export async function createCommandExecutionUpdate(item: CommandExecutionItem): 
     }, item.id, item.cwd);
 }
 
+/**
+ * Describes how the client reads command output and what the adapter already sent.
+ *
+ * A client that advertises `terminal_output_delta` reads the output only from the terminal metadata.
+ * The adapter then omits `rawOutput.formatted_output`.
+ * Other clients keep both channels, because a legacy client reads either the terminal metadata or the final raw output.
+ * Each channel carries the output once: as streamed chunks or as one final chunk, never both.
+ */
+export type CommandOutputDelivery = {
+    terminalOutputMode: TerminalOutputMode;
+    terminalOutputDeltaSupported: boolean;
+    /** The tool call shows a terminal. */
+    hasTerminal: boolean;
+    /** The adapter already streamed output chunks for this tool call. */
+    outputStreamed: boolean;
+};
+
+/**
+ * Pass `name` when the completion can be the first report of the tool call.
+ */
 export function createCommandExecutionCompleteUpdate(
     item: CommandExecutionItem,
-    terminalOutputMode: TerminalOutputMode,
-): UpdateSessionEvent | null {
-    if (item.status === "inProgress") {
-        return null;
-    }
-
+    delivery: CommandOutputDelivery,
+    name?: string,
+): UpdateSessionEvent {
     const update: UpdateSessionEvent = {
         sessionUpdate: "tool_call_update",
         toolCallId: item.id,
+        ...(name === undefined ? {} : {name}),
         status: item.status === "completed" ? "completed" : "failed",
-        rawOutput: {
-            formatted_output: item.aggregatedOutput ?? "",
-            exit_code: item.exitCode,
-        },
+        ...(delivery.terminalOutputDeltaSupported ? {} : {
+            rawOutput: {
+                formatted_output: item.aggregatedOutput ?? "",
+                exit_code: item.exitCode,
+            },
+        }),
     };
-
-    if (!commandExecutionUsesTerminalOutput(item)) {
-        return update;
-    }
 
     const terminalMeta: Record<string, unknown> = {};
-    if (item.aggregatedOutput) {
+    if (!delivery.outputStreamed && item.aggregatedOutput
+        && (delivery.hasTerminal || delivery.terminalOutputDeltaSupported)) {
         Object.assign(
             terminalMeta,
-            createTerminalOutputMeta(terminalOutputMode, item.id, item.aggregatedOutput),
+            createTerminalOutputMeta(delivery.terminalOutputMode, item.id, item.aggregatedOutput),
         );
     }
-    terminalMeta["terminal_exit"] = {
-        exit_code: item.exitCode,
-        signal: null,
-        terminal_id: item.id,
-    };
-
+    if (delivery.hasTerminal) {
+        terminalMeta["terminal_exit"] = {
+            exit_code: item.exitCode,
+            signal: null,
+            terminal_id: item.id,
+        };
+    }
+    if (Object.keys(terminalMeta).length === 0) {
+        return update;
+    }
     return {
         ...update,
         _meta: terminalMeta,

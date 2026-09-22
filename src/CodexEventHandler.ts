@@ -42,6 +42,7 @@ import type { McpStartupCompleteEvent } from "./app-server/McpStartupCompleteEve
 import {toTokenCount} from "./TokenCount";
 import {
     commandExecutionUsesTerminalOutput,
+    createCommandExecutionCompleteUpdate,
     createCommandExecutionUpdate,
     createContextCompactionCompleteUpdate,
     createContextCompactionStartUpdate,
@@ -1105,44 +1106,12 @@ export class CodexEventHandler {
     }
 
     private completeCommandExecutionEvent(item: ThreadItem & { "type": "commandExecution" }): UpdateSessionEvent {
-        const name = commandToolName(item.source);
-        const update: UpdateSessionEvent = {
-            sessionUpdate: "tool_call_update",
-            toolCallId: item.id,
-            ...(name === undefined ? {} : {name}),
-            status: item.status === "completed" ? "completed" : "failed",
-            ...(this.sessionState.terminalOutputDeltaSupported ? {} : {
-                rawOutput: {
-                    formatted_output: item.aggregatedOutput ?? "",
-                    exit_code: item.exitCode
-                },
-            }),
-        };
-
-        const commandHadTerminal = this.terminalCommandIds.delete(item.id);
-        const commandHadOutput = this.commandOutputIds.delete(item.id);
-        const terminalMeta: Record<string, unknown> = {};
-        if (!commandHadOutput && item.aggregatedOutput &&
-            (commandHadTerminal || this.sessionState.terminalOutputDeltaSupported)) {
-            Object.assign(
-                terminalMeta,
-                createTerminalOutputMeta(this.sessionState.terminalOutputMode, item.id, item.aggregatedOutput)
-            );
-        }
-        if (commandHadTerminal) {
-            terminalMeta["terminal_exit"] = {
-                exit_code: item.exitCode,
-                signal: null,
-                terminal_id: item.id
-            };
-        }
-        if (Object.keys(terminalMeta).length === 0) {
-            return update;
-        }
-        return {
-            ...update,
-            _meta: terminalMeta,
-        };
+        return createCommandExecutionCompleteUpdate(item, {
+            terminalOutputMode: this.sessionState.terminalOutputMode,
+            terminalOutputDeltaSupported: this.sessionState.terminalOutputDeltaSupported,
+            hasTerminal: this.terminalCommandIds.delete(item.id),
+            outputStreamed: this.commandOutputIds.delete(item.id),
+        }, commandToolName(item.source));
     }
 
     private async updatePlan(event: TurnPlanUpdatedNotification): Promise<UpdateSessionEvent> {
