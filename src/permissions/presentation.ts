@@ -15,32 +15,39 @@ type CommandPresentationParams = CommandExecutionRequestApprovalParams & {
     additionalPermissions?: AdditionalPermissionProfile | null;
 };
 
+/**
+ * A permission request carries a `ToolCallUpdate`, and the client merges it into the stored tool call.
+ * When the client already received the tool call, the update does not reset the status to `pending`.
+ * It also keeps the reported title, kind and raw input, unless the request adds data for the decision.
+ */
 export function commandToolCall(
     params: CommandPresentationParams,
     permissionContext: PermissionPromptContext,
 ): acp.ToolCallUpdate {
     const name = permissionContext.commandName(params.threadId, params.itemId);
+    const started = permissionContext.commandStarted(params.threadId, params.itemId);
     const network = params.networkApprovalContext;
+    const networkUrl = network?.protocol === "http" || network?.protocol === "https"
+        ? `${network.protocol}://${network.host}`
+        : undefined;
     const rawInput = {
         ...(params.command ? {command: stripShellPrefix(params.command)} : {}),
         ...(params.cwd ? {cwd: params.cwd} : {}),
-        ...(network?.protocol === "http" || network?.protocol === "https"
-            ? {url: `${network.protocol}://${network.host}`}
-            : {}),
+        ...(networkUrl ? {url: networkUrl} : {}),
         ...(params.additionalPermissions ? {additionalPermissions: params.additionalPermissions} : {}),
     };
+    const rawInputAddsDecisionData = networkUrl !== undefined || params.additionalPermissions != null;
     const additionalPermissionContent = params.additionalPermissions
         ? permissionProfileContent(params.additionalPermissions)
         : [];
     return {
         toolCallId: params.itemId,
         ...(name !== undefined ? {name} : {}),
-        kind: "execute",
-        status: "pending",
-        title: network
-            ? `${network.protocol} network access to ${network.host}`
-            : commandTitle(params.commandActions),
-        ...(Object.keys(rawInput).length > 0 ? {rawInput} : {}),
+        ...(started ? {} : {kind: "execute", status: "pending"}),
+        ...(network
+            ? {title: `${network.protocol} network access to ${network.host}`}
+            : started ? {} : {title: commandTitle(params.commandActions)}),
+        ...(Object.keys(rawInput).length > 0 && (!started || rawInputAddsDecisionData) ? {rawInput} : {}),
         ...locationsField(unique([
             ...commandActionPaths(params.commandActions),
             ...permissionProfilePaths(params.additionalPermissions),
@@ -53,6 +60,7 @@ export function commandToolCall(
     };
 }
 
+/** See `commandToolCall` for the fields that a started tool call keeps. */
 export function fileChangeToolCall(
     params: FileChangeRequestApprovalParams,
     permissionContext: PermissionPromptContext,
@@ -60,9 +68,7 @@ export function fileChangeToolCall(
     const item = permissionContext.fileChange(params.threadId, params.itemId);
     return {
         toolCallId: params.itemId,
-        kind: "edit",
-        status: "pending",
-        title: "Edit files",
+        ...(item === undefined ? {kind: "edit", status: "pending", title: "Edit files"} : {}),
         ...locationsField(fileChangePaths(item)),
     };
 }

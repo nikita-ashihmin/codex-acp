@@ -97,6 +97,12 @@ The `toolCall` remains the authoritative description of the action:
 - `content` carries details that do not fit a location, such as a network host, filesystem glob, special Codex scope, or MCP message.
 - `title`, `kind`, and `status` provide the standard ACP summary.
 
+The `toolCall` is an ACP `ToolCallUpdate`, and the client merges it into the stored tool call.
+When the client already received the command or file-change tool call, the request omits `status`, `kind`, and the generic `title`.
+The request then does not reset a started tool call to `pending`.
+It also omits `rawInput`, unless `rawInput` adds a network URL or additional permissions.
+A network approval keeps its network title.
+
 Command approvals use `kind: execute`. File changes use `kind: edit`. Additional sandbox permissions use `kind: other`. URL authorization fallback uses `kind: fetch`.
 
 For file changes, locations come from the correlated Codex `fileChange` item. `grantRoot` is not presented as though every file below it will be modified.

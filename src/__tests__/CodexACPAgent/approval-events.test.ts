@@ -130,6 +130,43 @@ describe("Approval Events", () => {
             await finish(prompt);
         });
 
+        it("keeps the status, title and raw input of a started command", async () => {
+            const prompt = setupSessionWithPendingPrompt();
+            fixture.sendServerNotification({
+                method: "item/started",
+                params: {
+                    threadId: sessionId,
+                    turnId: "turn-1",
+                    startedAtMs: 0,
+                    item: {
+                        type: "commandExecution",
+                        id: "command-item",
+                        pluginId: null,
+                        scriptPath: null,
+                        command: "npm test",
+                        cwd: "/workspace",
+                        processId: null,
+                        source: "agent",
+                        status: "inProgress",
+                        commandActions: [],
+                        aggregatedOutput: null,
+                        exitCode: null,
+                        durationMs: null,
+                    },
+                },
+            });
+            await fixture.getCodexAcpClient().waitForSessionNotifications(sessionId);
+            fixture.clearAcpConnectionDump();
+            fixture.setPermissionResponse({outcome: {outcome: "selected", optionId: ApprovalOptionId.AllowOnce}});
+
+            await fixture.sendServerRequest("item/commandExecution/requestApproval", commandParams(["accept", "cancel"]));
+
+            expect(permissionRequest().toolCall).not.toHaveProperty("status");
+            expect(permissionRequest().toolCall).not.toHaveProperty("title");
+            expect(permissionRequest().toolCall).not.toHaveProperty("rawInput");
+            await finish(prompt);
+        });
+
         it("emits an autonomous ACP v1 snapshot and maps explicit reject to decline", async () => {
             const prompt = setupSessionWithPendingPrompt();
             fixture.setPermissionResponse({outcome: {outcome: "selected", optionId: ApprovalOptionId.Decline}});
@@ -613,14 +650,12 @@ describe("Approval Events", () => {
             );
 
             expect(response).toEqual({decision: "acceptForSession"});
+            // The file change already started, so the request keeps its status, kind and title.
+            expect(permissionRequest().toolCall).toEqual({
+                toolCallId: "file-item",
+                locations: [{path: "/workspace/a.ts"}, {path: "/workspace/b.ts"}],
+            });
             expect(permissionRequest()).toMatchObject({
-                toolCall: {
-                    toolCallId: "file-item",
-                    kind: "edit",
-                    status: "pending",
-                    title: "Edit files",
-                    locations: [{path: "/workspace/a.ts"}, {path: "/workspace/b.ts"}],
-                },
                 _meta: {permission: {
                     version: 1,
                     title: "Make edits?",
