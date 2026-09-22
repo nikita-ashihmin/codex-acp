@@ -827,13 +827,13 @@ function imageGenerationContent(
     return content;
 }
 
+/** The image data travels only in the tool call content, so the raw output omits it. */
 function imageGenerationRawOutput(
     item: ThreadItem & { type: "imageGeneration" }
 ): Record<string, string | null> {
     const output: Record<string, string | null> = {
         status: item.status,
         revisedPrompt: item.revisedPrompt,
-        result: item.result,
     };
     if ("savedPath" in item) {
         output["savedPath"] = item.savedPath ?? null;

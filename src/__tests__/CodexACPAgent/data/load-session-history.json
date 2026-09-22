@@ -397,7 +397,6 @@
         "rawOutput": {
           "status": "completed",
           "revisedPrompt": "A tiny blue square",
-          "result": "iVBORw0KGgo=",
           "savedPath": "/test/project/generated-blue-square.png"
         }
       }
