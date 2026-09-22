@@ -10,13 +10,13 @@ export type AirCapabilities = {
     readonly rawInputRendering: boolean;
     /** AIR appends `plan_update._meta.jetbrains.air.contentDelta` to the plan content. */
     readonly planContentDelta: boolean;
-    /** AIR reads a file change as a Git patch, see `docs/diff-patch-extension.md`. */
+    /** AIR reads a file change as a Git patch, see `docs/air-extensions.md#diff-patch`. */
     readonly diffPatch: boolean;
 };
 
 /**
  * The client capabilities that decide how the adapter reports tool calls and plans.
- * The adapter reads them once in `initialize`. See `docs/acp-tool-call-contract.md`.
+ * The adapter reads them once in `initialize`. See `docs/air-extensions.md#tool-call-contract`.
  */
 export class ClientCapabilities {
     static readonly DEFAULT = new ClientCapabilities(false, false, {

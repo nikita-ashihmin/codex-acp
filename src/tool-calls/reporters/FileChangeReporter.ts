@@ -14,7 +14,7 @@ export const FILE_CHANGE_TITLE = "Editing files";
 
 /**
  * Reports a Codex file change. The diff in `content` carries the file text.
- * With the AIR `diffPatch` capability, the diff is a Git patch, see `docs/diff-patch-extension.md`.
+ * With the AIR `diffPatch` capability, the diff is a Git patch, see `docs/air-extensions.md#diff-patch`.
  */
 export class FileChangeReporter {
     static async started(item: FileChangeItem, diffPatch: boolean): Promise<ToolFacts> {

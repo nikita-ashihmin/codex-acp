@@ -11,7 +11,7 @@ type ToolCallReport = Extract<UpdateSessionEvent, {sessionUpdate: "tool_call" | 
 /**
  * Turns the facts of a `ToolReporter` into ACP tool call fields.
  *
- * Each fact goes into one field, see `docs/acp-tool-call-contract.md`.
+ * Each fact goes into one field, see `docs/air-extensions.md#tool-call-contract`.
  * The capabilities decide the terminal channel and the display copy of the input.
  * `ToolCallReports` then drops the fields that an earlier report already sent.
  */

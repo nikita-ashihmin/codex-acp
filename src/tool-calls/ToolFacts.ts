@@ -5,7 +5,7 @@ import type {ContextCompactionMetadata} from "../ContextCompactionMeta";
  * What a `ToolReporter` knows about one report of a tool call, before the client shape is chosen.
  *
  * Each fact has one field. `AcpToolCallRenderer` puts each fact into exactly one ACP field,
- * see `docs/acp-tool-call-contract.md`. An absent field means "no news" for this report.
+ * see `docs/air-extensions.md#tool-call-contract`. An absent field means "no news" for this report.
  */
 export type ToolFacts = {
     toolCallId: string;
