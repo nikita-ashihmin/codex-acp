@@ -60,7 +60,8 @@ import type {QuotaMeta} from "./QuotaMeta";
 import {logger} from "./Logger";
 import {sanitizeMcpServerName} from "./McpServerName";
 import {createResponseItemHistoryFallbackUpdates} from "./ResponseItemHistoryFallback";
-import {ToolCallReports} from "./ToolCallReports";
+import type {ToolCallReports} from "./ToolCallReports";
+import {ToolCallReportingConnection} from "./ToolCallReportingConnection";
 import {
     AUTH_STATUS_META_KEY,
     AUTH_STATUS_UPDATE_METHOD,
@@ -270,6 +271,7 @@ export interface CodexProcessState {
 export class CodexAcpServer {
     private codexAcpClient: CodexAcpClient;
     private readonly connection: AcpClientConnection;
+    private readonly reportingConnection: ToolCallReportingConnection;
     private readonly defaultAuthRequest: CodexAuthRequest | null;
     private readonly getExitCode: () => number | null;
     private readonly getRecentStderr: () => string;
@@ -316,7 +318,8 @@ export class CodexAcpServer {
         this.sessionOpenGenerations = new Map();
         this.goalControlGenerations = new Map();
         this.permissionLifecycleContexts = new WeakMap();
-        this.connection = connection;
+        this.reportingConnection = new ToolCallReportingConnection(connection);
+        this.connection = this.reportingConnection.asClientConnection();
         this.codexAcpClient = codexAcpClient;
         this.defaultAuthRequest = defaultAuthRequest ?? null;
         this.codexProcessState = codexProcessState ?? null;
@@ -712,7 +715,7 @@ export class CodexAcpServer {
             ),
             asyncTasks: this.createAsyncTasks(sessionId),
             compactions: new CodexSessionCompactions(),
-            toolCallReports: new ToolCallReports(),
+            toolCallReports: this.reportingConnection.reports,
         };
         sessionState.titleGen = new TitleGenerator(
             this.codexAcpClient.appServerClient,
@@ -1972,7 +1975,7 @@ export class CodexAcpServer {
             ),
             asyncTasks: this.createAsyncTasks(sessionId),
             compactions: new CodexSessionCompactions(),
-            toolCallReports: new ToolCallReports(),
+            toolCallReports: this.reportingConnection.reports,
         };
         sessionState.titleGen = new TitleGenerator(
             this.codexAcpClient.appServerClient,

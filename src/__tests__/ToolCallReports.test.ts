@@ -155,6 +155,19 @@ describe("ToolCallReports late output", () => {
         })).toBeNull();
     });
 
+    it("keeps the output of a completion report after a start with the final status", () => {
+        const reports = new ToolCallReports();
+        reports.prepare("s", {sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "ls", status: "completed"});
+        const completion = {
+            sessionUpdate: "tool_call_update" as const,
+            toolCallId: "cmd-1",
+            status: "completed" as const,
+            _meta: {terminal_output_delta: {data: "a.txt\n", terminal_id: "cmd-1"}},
+        };
+
+        expect(reports.prepare("s", completion)).toEqual(completion);
+    });
+
     it("accepts output again when the tool call id starts a new tool call", () => {
         const reports = new ToolCallReports();
         reports.prepare("s", {sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "ls", status: "completed"});

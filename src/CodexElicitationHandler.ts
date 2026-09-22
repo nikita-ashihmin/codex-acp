@@ -231,8 +231,6 @@ export class CodexElicitationHandler implements ElicitationHandler {
                             sessionUpdate: "tool_call_update",
                             toolCallId: request.toolCall.toolCallId,
                             status: "completed",
-                            title: request.toolCall.title,
-                            content: request.toolCall.content,
                             rawOutput: { action: result.action },
                         },
                     });

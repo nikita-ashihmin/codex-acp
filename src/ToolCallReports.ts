@@ -92,7 +92,9 @@ export class ToolCallReports {
     }
 
     private withoutLateOutput(update: ToolCallReport): ToolCallReport | null {
-        if (!isRecord(update._meta)) {
+        // An update with a status is a completion report, for example after a history replay
+        // started the tool call with its final status. Its output is not late.
+        if (update.status != null || !isRecord(update._meta)) {
             return update;
         }
         const meta = {...update._meta};
