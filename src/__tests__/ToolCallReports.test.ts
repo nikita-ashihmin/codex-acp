@@ -100,15 +100,23 @@ describe("ToolCallReports", () => {
         expect(reports.prepare("s", update)).toEqual(update);
     });
 
-    it("forgets a finished tool call and separates sessions", () => {
+    it("keeps only the small fields of a finished tool call and separates sessions", () => {
         const reports = new ToolCallReports();
-        const start = {sessionUpdate: "tool_call" as const, toolCallId: "t", title: "A", status: "in_progress" as const};
+        const start = {
+            sessionUpdate: "tool_call" as const,
+            toolCallId: "t",
+            title: "A",
+            status: "in_progress" as const,
+            rawInput: {command: "ls"},
+        };
         reports.prepare("s", start);
         reports.prepare("s", {sessionUpdate: "tool_call_update", toolCallId: "t", status: "completed"});
-        const repeated = {sessionUpdate: "tool_call_update" as const, toolCallId: "t", title: "A"};
 
-        expect(reports.prepare("s", repeated)).toEqual(repeated);
+        expect(reports.prepare("s", {sessionUpdate: "tool_call_update", toolCallId: "t", title: "A"})).toBeNull();
+        const input = {sessionUpdate: "tool_call_update" as const, toolCallId: "t", rawInput: {command: "ls"}};
+        expect(reports.prepare("s", input)).toEqual(input);
         reports.prepare("s", start);
+        const repeated = {sessionUpdate: "tool_call_update" as const, toolCallId: "t", title: "A"};
         expect(reports.prepare("other", repeated)).toEqual(repeated);
     });
 });
@@ -155,17 +163,17 @@ describe("ToolCallReports late output", () => {
         })).toBeNull();
     });
 
-    it("keeps the output of a completion report after a start with the final status", () => {
+    it("keeps the output of a completion report after a start with the final status, without the status", () => {
         const reports = new ToolCallReports();
         reports.prepare("s", {sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "ls", status: "completed"});
-        const completion = {
-            sessionUpdate: "tool_call_update" as const,
-            toolCallId: "cmd-1",
-            status: "completed" as const,
-            _meta: {terminal_output_delta: {data: "a.txt\n", terminal_id: "cmd-1"}},
-        };
+        const output = {terminal_output_delta: {data: "a.txt\n", terminal_id: "cmd-1"}};
 
-        expect(reports.prepare("s", completion)).toEqual(completion);
+        expect(reports.prepare("s", {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            status: "completed",
+            _meta: output,
+        })).toEqual({sessionUpdate: "tool_call_update", toolCallId: "cmd-1", _meta: output});
     });
 
     it("accepts output again when the tool call id starts a new tool call", () => {

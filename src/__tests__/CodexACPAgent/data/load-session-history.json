@@ -203,7 +203,6 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "item-cmd-1",
-        "status": "completed",
         "rawOutput": {
           "formatted_output": "Added.txt\nREADME.md\n",
           "exit_code": 0

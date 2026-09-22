@@ -6,6 +6,8 @@ type ToolCallReport = Extract<UpdateSessionEvent, {sessionUpdate: "tool_call" | 
 /** The client appends these metadata values, so the adapter never compares them with an earlier value. */
 const OUTPUT_DELTA_META_KEYS = new Set(["terminal_output", "terminal_output_delta", "terminal_input", "mcp_output_delta"]);
 const COMPARED_FIELDS = ["title", "kind", "status", "name", "content", "locations", "rawInput", "rawOutput"] as const;
+/** The small fields that the adapter keeps for a finished tool call. */
+const FINISHED_FIELDS = new Set<string>(["title", "kind", "status", "name"]);
 const META_FIELD_PREFIX = "_meta.";
 const MAX_FINISHED_TOOL_CALLS = 1024;
 
@@ -15,12 +17,13 @@ const MAX_FINISHED_TOOL_CALLS = 1024;
  * ACP clients merge a `tool_call_update` into the stored tool call.
  * A present field replaces the stored value, and a `_meta` key replaces the stored key.
  * So an update carries only the fields that changed since the last report.
- * The record of a tool call goes away when the tool call reaches a terminal status.
- * A bounded set of finished tool call ids remains, so that late output chunks can be dropped.
+ * The record of a tool call shrinks when the tool call reaches a terminal status.
+ * A bounded set of finished tool calls keeps the small fields, so that late output chunks can be dropped
+ * and a completion after a replayed start does not repeat the status.
  */
 export class ToolCallReports {
     private readonly openToolCalls = new Map<string, Map<string, string>>();
-    private readonly finishedToolCalls = new Set<string>();
+    private readonly finishedToolCalls = new Map<string, Map<string, string>>();
 
     /**
      * Returns the update to send, without the fields that did not change.
@@ -63,11 +66,22 @@ export class ToolCallReports {
     }
 
     private recordUpdate(key: string, update: ToolCallReport): ToolCallReport | null {
-        if (this.finishedToolCalls.has(key)) {
-            return this.withoutLateOutput(update);
+        const finished = this.finishedToolCalls.get(key);
+        if (finished !== undefined) {
+            const current = this.withoutLateOutput(update);
+            return current === null ? null : this.withoutUnchangedFields(current, finished, FINISHED_FIELDS);
         }
         const fields = this.openToolCalls.get(key) ?? new Map<string, string>();
         this.openToolCalls.set(key, fields);
+        return this.withoutUnchangedFields(update, fields);
+    }
+
+    /** Drops the fields whose value `fields` already has, and records the other fields, or only `recorded` ones. */
+    private withoutUnchangedFields(
+        update: ToolCallReport,
+        fields: Map<string, string>,
+        recorded?: Set<string>,
+    ): ToolCallReport | null {
         const prepared: Record<string, unknown> = {...update};
         const meta = isRecord(update._meta) ? {...update._meta} : undefined;
         for (const [name, value] of reportedFields(update)) {
@@ -79,7 +93,7 @@ export class ToolCallReports {
                 }
                 continue;
             }
-            fields.set(name, value);
+            if (recorded === undefined || recorded.has(name)) fields.set(name, value);
         }
         if (meta !== undefined) {
             if (Object.keys(meta).length > 0) {
@@ -116,11 +130,12 @@ export class ToolCallReports {
     }
 
     private finish(key: string): void {
+        const fields = this.openToolCalls.get(key) ?? this.finishedToolCalls.get(key) ?? new Map<string, string>();
         this.openToolCalls.delete(key);
         this.finishedToolCalls.delete(key);
-        this.finishedToolCalls.add(key);
+        this.finishedToolCalls.set(key, new Map([...fields].filter(([name]) => FINISHED_FIELDS.has(name))));
         if (this.finishedToolCalls.size > MAX_FINISHED_TOOL_CALLS) {
-            const oldest = this.finishedToolCalls.values().next().value;
+            const oldest = this.finishedToolCalls.keys().next().value;
             if (oldest !== undefined) this.finishedToolCalls.delete(oldest);
         }
     }
