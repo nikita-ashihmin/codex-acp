@@ -6,7 +6,7 @@ import { stripShellPrefix } from "./CommandUtils";
 import type { CommandAction, Thread, ThreadItem } from "./app-server/v2";
 import { createCommandActionEvent } from "./CodexToolCallMapper";
 import { createTerminalOutputMeta, type TerminalOutputMode } from "./TerminalOutputMode";
-import { createAgentMessageChunk, createCodexMessagePhaseMeta } from "./ContentChunks";
+import { createAgentMessageChunk, createMessagePhaseMeta } from "./ContentChunks";
 import { functionToolName } from "./ToolCallName";
 
 type JsonRecord = Record<string, unknown>;
@@ -247,7 +247,7 @@ function createMessageUpdates(item: JsonRecord): UpdateSessionEvent[] {
 
     const phase = stringValue(item["phase"]);
     return contentBlocksFromResponseContent(item["content"]).map((content) => (
-        createAgentMessageChunk(content, undefined, createCodexMessagePhaseMeta(phase))
+        createAgentMessageChunk(content, undefined, createMessagePhaseMeta(phase))
     ));
 }
 

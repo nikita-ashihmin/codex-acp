@@ -68,7 +68,7 @@ import { stripShellPrefix } from "./CommandUtils";
 import {commandToolName, functionToolName} from "./ToolCallName";
 import {createTerminalOutputMeta, type TerminalOutputMode} from "./TerminalOutputMode";
 import {
-    createCodexMessagePhaseMeta,
+    createMessagePhaseMeta,
     createAgentTextMessageChunk,
     createAgentTextThoughtChunk,
 } from "./ContentChunks";
@@ -78,9 +78,11 @@ import {randomUUID} from "node:crypto";
 import {
     AIR_EXTENSION_VERSION,
     AIR_EXTENSION_VERSION_KEY,
+    AIR_GOAL_KEY,
     AIR_META_KEY,
     AIR_SESSION_FAILURE_KEY,
     JETBRAINS_META_KEY,
+    withAirMeta,
 } from "./AirExtension";
 import {CodexSubagentEventRouter} from "./subagents/CodexSubagentEventRouter";
 import type {SubagentState} from "./subagents/AcpSubagents";
@@ -710,7 +712,7 @@ export class CodexEventHandler {
 
     private async createTextEvent(event: AgentMessageDeltaNotification): Promise<UpdateSessionEvent> {
         const phase = this.agentMessagePhases.get(event.itemId) ?? null;
-        return createAgentTextMessageChunk(event.delta, event.itemId, createCodexMessagePhaseMeta(phase));
+        return createAgentTextMessageChunk(event.delta, event.itemId, createMessagePhaseMeta(phase));
     }
 
     private async createConfigWarningEvent(event: ConfigWarningNotification): Promise<UpdateSessionEvent> {
@@ -768,7 +770,7 @@ export class CodexEventHandler {
     private createGoalSessionInfoUpdate(goal: ThreadGoalSnapshot | null): UpdateSessionEvent {
         return {
             sessionUpdate: "session_info_update",
-            _meta: {goal},
+            _meta: withAirMeta(undefined, AIR_GOAL_KEY, goal),
         };
     }
 
@@ -1010,7 +1012,7 @@ export class CodexEventHandler {
         return createAgentTextMessageChunk(
             text,
             messageId,
-            createCodexMessagePhaseMeta("final_answer"),
+            createMessagePhaseMeta("final_answer"),
         );
     }
 

@@ -1,5 +1,6 @@
 import type * as acp from "@agentclientprotocol/sdk";
 import type {CompletedPlan} from "../CodexEventHandler";
+import {AIR_PLAN_REVIEW_KEY, withAirMeta} from "../AirExtension";
 
 const IMPLEMENT_PLAN_OPTION_ID = "implement_plan";
 const REVISE_PLAN_OPTION_ID = "revise_plan";
@@ -25,7 +26,7 @@ export function planImplementationPermissionRequest(
                 kind: "reject_once",
             },
         ],
-        _meta: {codex: {kind: "plan_review", planItemId: plan.itemId}},
+        _meta: withAirMeta(undefined, AIR_PLAN_REVIEW_KEY, {planItemId: plan.itemId}),
     };
 }
 

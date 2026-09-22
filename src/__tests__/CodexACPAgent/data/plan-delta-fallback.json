@@ -11,8 +11,11 @@
           "text": "### Buffered plan\n\n1. Use the buffered fallback."
         },
         "_meta": {
-          "codex": {
-            "phase": "final_answer"
+          "jetbrains": {
+            "air": {
+              "version": 1,
+              "phase": "final_answer"
+            }
           }
         }
       }

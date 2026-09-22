@@ -117,7 +117,7 @@ import {clientSupportsPlanUpdates} from "./PlanCapabilities";
 import {
     createAgentTextMessageChunk,
     createAgentTextThoughtChunk,
-    createCodexMessagePhaseMeta,
+    createMessagePhaseMeta,
     createUserMessageChunk,
 } from "./ContentChunks";
 import {sameThreadGoalSnapshot, type ThreadGoalSnapshot, toThreadGoalSnapshot,} from "./ThreadGoalSnapshot";
@@ -144,11 +144,13 @@ import {
     AIR_RECOMMENDED_CONFIG_VALUE_KEY,
     AIR_EXTENSION_CAPABILITIES_KEY,
     AIR_EXTENSION_VERSION,
+    AIR_GOAL_KEY,
     AIR_EXTENSION_VERSION_KEY,
     AIR_META_KEY,
     AIR_SESSION_FAILURE_KEY,
     clientSupportsAirCapability,
     JETBRAINS_META_KEY,
+    withAirMeta,
 } from "./AirExtension";
 import {ASYNC_TASK_STOP_METHOD} from "./async-tasks/AsyncTaskExtension";
 import {CodexBackgroundTerminalTasks} from "./async-tasks/CodexBackgroundTerminalTasks";
@@ -401,14 +403,14 @@ export class CodexAcpServer {
                 steering: {
                     supported: true,
                 },
-                goal: {
-                    version: GOAL_EXTENSION_VERSION,
-                    controlMethod: GOAL_CONTROL_METHOD,
-                    actions: [...GOAL_CONTROL_ACTIONS],
-                },
                 [JETBRAINS_META_KEY]: {
                     [AIR_META_KEY]: {
                         [AIR_EXTENSION_VERSION_KEY]: AIR_EXTENSION_VERSION,
+                        [AIR_GOAL_KEY]: {
+                            version: GOAL_EXTENSION_VERSION,
+                            controlMethod: GOAL_CONTROL_METHOD,
+                            actions: [...GOAL_CONTROL_ACTIONS],
+                        },
                         [AIR_EXTENSION_CAPABILITIES_KEY]: [
                             AIR_SESSION_FAILURE_KEY,
                             AIR_DIFF_PATCH_KEY,
@@ -1866,9 +1868,7 @@ export class CodexAcpServer {
         const session = new ACPSessionConnection(this.connection, sessionState.sessionId);
         await session.update({
             sessionUpdate: "session_info_update",
-            _meta: {
-                goal: snapshot,
-            },
+            _meta: withAirMeta(undefined, AIR_GOAL_KEY, snapshot),
         });
     }
 
@@ -2266,7 +2266,7 @@ export class CodexAcpServer {
             case "subAgentActivity":
                 return [createSubAgentActivityUpdate(item, "completed", "tool_call")];
             case "agentMessage": {
-                const meta = createCodexMessagePhaseMeta(item.phase);
+                const meta = createMessagePhaseMeta(item.phase);
                 return [{
                     sessionUpdate: "agent_message_chunk",
                     messageId: item.id,
@@ -2381,7 +2381,7 @@ export class CodexAcpServer {
         return createAgentTextMessageChunk(
             item.text,
             item.id,
-            createCodexMessagePhaseMeta("final_answer"),
+            createMessagePhaseMeta("final_answer"),
         );
     }
 

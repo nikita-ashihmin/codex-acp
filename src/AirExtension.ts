@@ -20,6 +20,13 @@ export const AIR_ASYNC_TASKS_KEY = "asyncTasks";
 export const AIR_RECOMMENDED_CONFIG_VALUE_KEY = "recommendedValue";
 export const AIR_ASYNC_TASKS_BACKGROUNDED_KEY = "backgrounded";
 export const AIR_AGENT_FILE_CHANGE_REPORT_REQUEST_KEY = "agentFileChangeReportRequest";
+export const AIR_MESSAGE_PHASE_KEY = "phase";
+export const AIR_GOAL_KEY = "goal";
+export const AIR_KIND_KEY = "kind";
+export const AIR_COMMAND_ACTION_KEY = "commandAction";
+export const AIR_PERMISSION_KEY = "permission";
+export const AIR_CONTEXT_COMPACTION_KEY = "contextCompaction";
+export const AIR_PLAN_REVIEW_KEY = "planReview";
 export const AIR_EXTENSION_VERSION = 1;
 
 /** Merge one AIR payload into metadata while preserving other object namespaces. */

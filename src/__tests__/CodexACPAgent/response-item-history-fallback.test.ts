@@ -111,7 +111,7 @@ describe("ResponseItemHistoryFallback", () => {
         ]), "terminal_output");
 
         expect(agentMessageMetas(updates)).toEqual([
-            { codex: { phase: "final_answer" } },
+            { jetbrains: { air: { version: 1, phase: "final_answer" } } },
         ]);
     });
 

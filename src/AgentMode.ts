@@ -1,5 +1,6 @@
 import type {ApprovalsReviewer, AskForApproval, SandboxMode, SandboxPolicy} from "./app-server/v2";
 import type {SessionConfigOption, SessionMode, SessionModeState} from "@agentclientprotocol/sdk";
+import {AIR_KIND_KEY, withAirMeta} from "./AirExtension";
 
 export const MODE_CONFIG_ID = "mode";
 
@@ -85,7 +86,7 @@ export class AgentMode {
             id: this.id,
             name: this.name,
             description: this.description,
-            _meta: {kind: this.kind},
+            _meta: withAirMeta(undefined, AIR_KIND_KEY, this.kind),
         };
     }
 
@@ -108,7 +109,7 @@ export class AgentMode {
                 value: mode.id,
                 name: mode.name,
                 description: mode.description,
-                _meta: {kind: mode.kind},
+                _meta: withAirMeta(undefined, AIR_KIND_KEY, mode.kind),
             })),
         };
     }

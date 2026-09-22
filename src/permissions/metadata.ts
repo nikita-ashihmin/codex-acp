@@ -1,4 +1,5 @@
 import type * as acp from "@agentclientprotocol/sdk";
+import {AIR_PERMISSION_KEY, withAirMeta} from "../AirExtension";
 
 export const CODEX_COMMAND_PERMISSION_TITLE = "Run command?";
 export const CODEX_NETWORK_PERMISSION_TITLE = "Allow network access?";
@@ -26,7 +27,7 @@ export function requestPermissionMeta(
         title,
         ...(description ? {description} : {}),
     };
-    return {permission};
+    return withAirMeta(undefined, AIR_PERMISSION_KEY, permission);
 }
 
 export function optionPermissionMeta(
@@ -35,7 +36,7 @@ export function optionPermissionMeta(
     const normalized = nonBlank(description);
     if (!normalized) return undefined;
     const permission: OptionPermissionMetadata = {version: 1, description: normalized};
-    return {permission};
+    return withAirMeta(undefined, AIR_PERMISSION_KEY, permission);
 }
 
 function nonBlank(value?: string | null): string | undefined {

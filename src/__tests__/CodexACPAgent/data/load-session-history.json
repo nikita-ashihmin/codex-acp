@@ -23,12 +23,17 @@
             "description": "Turn plan mode on.",
             "input": null,
             "_meta": {
-              "commandAction": {
-                "kind": "setConfigOption",
-                "configId": "collaboration_mode",
-                "value": "plan",
-                "resetValue": "default",
-                "presentation": "state"
+              "jetbrains": {
+                "air": {
+                  "version": 1,
+                  "commandAction": {
+                    "kind": "setConfigOption",
+                    "configId": "collaboration_mode",
+                    "value": "plan",
+                    "resetValue": "default",
+                    "presentation": "state"
+                  }
+                }
               }
             }
           },
@@ -80,9 +85,14 @@
               "hint": "[<objective>|clear|pause|resume]"
             },
             "_meta": {
-              "commandAction": {
-                "kind": "prefixPrompt",
-                "presentation": "state"
+              "jetbrains": {
+                "air": {
+                  "version": 1,
+                  "commandAction": {
+                    "kind": "prefixPrompt",
+                    "presentation": "state"
+                  }
+                }
               }
             }
           },
@@ -111,15 +121,20 @@
       "update": {
         "sessionUpdate": "session_info_update",
         "_meta": {
-          "goal": {
-            "objective": "Keep the restored migration green",
-            "status": "paused",
-            "tokenBudget": null,
-            "tokensUsed": 42,
-            "timeUsedSeconds": 46,
-            "createdAt": 1710000000000,
-            "updatedAt": 1710000046000,
-            "controlMethod": "_session/goal"
+          "jetbrains": {
+            "air": {
+              "version": 1,
+              "goal": {
+                "objective": "Keep the restored migration green",
+                "status": "paused",
+                "tokenBudget": null,
+                "tokensUsed": 42,
+                "timeUsedSeconds": 46,
+                "createdAt": 1710000000000,
+                "updatedAt": 1710000046000,
+                "controlMethod": "_session/goal"
+              }
+            }
           }
         }
       }
@@ -424,8 +439,13 @@
         "title": "Compact conversation",
         "status": "completed",
         "_meta": {
-          "contextCompaction": {
-            "version": 1
+          "jetbrains": {
+            "air": {
+              "version": 1,
+              "contextCompaction": {
+                "version": 1
+              }
+            }
           }
         }
       }

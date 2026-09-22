@@ -70,14 +70,14 @@ describe('CodexACPAgent - initialize', () => {
                 steering: {
                     supported: true,
                 },
-                goal: {
-                    version: 1,
-                    controlMethod: "_session/goal",
-                    actions: ["set", "pause", "resume", "clear"],
-                },
                 jetbrains: {
                     air: {
                         version: 1,
+                        goal: {
+                            version: 1,
+                            controlMethod: "_session/goal",
+                            actions: ["set", "pause", "resume", "clear"],
+                        },
                         capabilities: ["sessionFailure", "diffPatch", "agentFileChangeReport", "nativeSubagentSessions", "asyncTasks", "recommendedValue"],
                     },
                 },

@@ -207,15 +207,15 @@ describe("Approval Events", () => {
                         kind: "reject_once",
                     },
                 ],
-                _meta: {permission: {
+                _meta: {jetbrains: {air: {version: 1, permission: {
                     version: 1,
                     title: "Run command?",
                     description: "Needed to verify the changes.",
-                }},
+                }}}},
             });
             for (const option of permissionRequest().options) {
-                if (option._meta?.permission) {
-                    expect(option._meta.permission).not.toHaveProperty("changes");
+                if (option._meta?.jetbrains?.air?.permission) {
+                    expect(option._meta.jetbrains.air.permission).not.toHaveProperty("changes");
                 }
             }
             expect(JSON.stringify(permissionRequest())).not.toContain("exact_command");
@@ -491,7 +491,7 @@ describe("Approval Events", () => {
                     {name: "No, and tell Codex what to do differently"},
                 ],
             });
-            expect(permissionRequest()._meta.permission.description).toBe("Needed to verify the changes.");
+            expect(permissionRequest()._meta.jetbrains.air.permission.description).toBe("Needed to verify the changes.");
             await finish(prompt);
         });
 
@@ -512,11 +512,11 @@ describe("Approval Events", () => {
                     }),
                 );
                 expect(response).toEqual({decision});
-                expect(permissionRequest()._meta).toEqual({permission: {
+                expect(permissionRequest()._meta).toEqual({jetbrains: {air: {version: 1, permission: {
                     version: 1,
                     title: "Allow network access?",
                     description: "Needed to verify the changes.",
-                }});
+                }}}});
                 expect(permissionRequest().toolCall).toMatchObject({
                     title: `${protocol} network access to example.test`,
                     content: [{type: "content", content: {type: "text", text: `${protocol} access to example.test`}}],
@@ -656,11 +656,11 @@ describe("Approval Events", () => {
                 locations: [{path: "/workspace/a.ts"}, {path: "/workspace/b.ts"}],
             });
             expect(permissionRequest()).toMatchObject({
-                _meta: {permission: {
+                _meta: {jetbrains: {air: {version: 1, permission: {
                     version: 1,
                     title: "Make edits?",
                     description: "Apply the generated edits.",
-                }},
+                }}}},
             });
             expect(JSON.stringify(permissionRequest())).not.toContain("grantRoot");
             expect(JSON.stringify(permissionRequest())).not.toContain("writes under");
@@ -744,11 +744,11 @@ describe("Approval Events", () => {
                             'write Codex filesystem scope {"kind":"project_roots","subpath":"build"}',
                         ].join("\n")}}],
                     },
-                    _meta: {permission: {
+                    _meta: {jetbrains: {air: {version: 1, permission: {
                         version: 1,
                         title: "Grant permissions?",
                         description: "The build needs generated output access.",
-                    }},
+                    }}}},
                 });
                 expect(permissionRequest().options).toEqual([
                     {

@@ -3,7 +3,7 @@
 For a user-facing summary of behavior changes, see
 [`permission-changes.ru.md`](permission-changes.ru.md).
 
-This document defines the provider-neutral permission presentation implemented by `codex-acp`. Permission decisions use the standard ACP `session/request_permission` method. The optional `_meta.permission` extension adds display text only; it never changes which actions a client may approve.
+This document defines the provider-neutral permission presentation implemented by `codex-acp`. Permission decisions use the standard ACP `session/request_permission` method. The optional `_meta.jetbrains.air.permission` extension adds display text only; it never changes which actions a client may approve.
 
 ## Protocol contract
 
@@ -11,7 +11,7 @@ Every permission request contains:
 
 - a `toolCall` describing the action that needs approval;
 - an ordered `options` array containing every decision the user may select;
-- optional request-level and option-level `_meta.permission` presentation data.
+- optional request-level and option-level `_meta.jetbrains.air.permission` presentation data.
 
 Clients make a decision by returning one of the advertised `optionId` values. They must not derive a decision from the option label, `kind`, or metadata. `codex-acp` keeps the exact Codex decision associated with each option and returns that original value to Codex.
 
@@ -41,16 +41,21 @@ Clients make a decision by returning one of the advertised `optionId` values. Th
     }
   ],
   "_meta": {
-    "permission": {
-      "version": 1,
-      "title": "Run command?",
-      "description": "The test suite needs to run outside the current sandbox."
+    "jetbrains": {
+      "air": {
+        "version": 1,
+        "permission": {
+          "version": 1,
+          "title": "Run command?",
+          "description": "The test suite needs to run outside the current sandbox."
+        }
+      }
     }
   }
 }
 ```
 
-The standard ACP fields are the compatibility contract. A client that ignores `_meta.permission` can still render the action, present every option, and return a correct decision.
+The standard ACP fields are the compatibility contract. A client that ignores `_meta.jetbrains.air.permission` can still render the action, present every option, and return a correct decision.
 
 ## Presentation metadata
 
@@ -59,10 +64,15 @@ Request-level metadata has this shape:
 ```json
 {
   "_meta": {
-    "permission": {
-      "version": 1,
-      "title": "Allow network access?",
-      "description": "Download the requested dependency."
+    "jetbrains": {
+      "air": {
+        "version": 1,
+        "permission": {
+          "version": 1,
+          "title": "Allow network access?",
+          "description": "Download the requested dependency."
+        }
+      }
     }
   }
 }
@@ -78,9 +88,14 @@ An individual option may provide a description:
   "name": "Allow for this session",
   "kind": "allow_always",
   "_meta": {
-    "permission": {
-      "version": 1,
-      "description": "Run the tool and remember this choice for this session."
+    "jetbrains": {
+      "air": {
+        "version": 1,
+        "permission": {
+          "version": 1,
+          "description": "Run the tool and remember this choice for this session."
+        }
+      }
     }
   }
 }

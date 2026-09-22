@@ -11,8 +11,11 @@
           "text": "Completed text should not duplicate the streamed plan."
         },
         "_meta": {
-          "codex": {
-            "phase": "final_answer"
+          "jetbrains": {
+            "air": {
+              "version": 1,
+              "phase": "final_answer"
+            }
           }
         }
       }
