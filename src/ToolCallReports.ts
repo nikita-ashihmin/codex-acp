@@ -40,6 +40,18 @@ export class ToolCallReports {
         return prepared;
     }
 
+    /**
+     * Forgets the open tool calls of one session when its turn ends.
+     * A tool call that never reached a terminal status would otherwise keep its fields until the session closes.
+     * A later update for a forgotten tool call carries every field again, which the client merges as usual.
+     */
+    releaseOpen(sessionId: string): void {
+        const prefix = `${sessionId}\u0000`;
+        for (const key of [...this.openToolCalls.keys()]) {
+            if (key.startsWith(prefix)) this.openToolCalls.delete(key);
+        }
+    }
+
     private recordStart(key: string, update: ToolCallReport): ToolCallReport {
         this.finishedToolCalls.delete(key);
         const fields = new Map<string, string>();

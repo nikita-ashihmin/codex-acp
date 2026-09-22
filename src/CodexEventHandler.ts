@@ -567,6 +567,7 @@ export class CodexEventHandler {
                 await this.flushPendingPlanUpdates();
                 this.clearPlanTurnState();
                 this.sessionState.currentTurnId = null;
+                this.sessionState.toolCallReports.releaseOpen(this.subagents.notificationSessionId(notification));
                 return null;
             case "thread/tokenUsage/updated":
                 return this.createUsageUpdate(notification.params);

@@ -113,6 +113,30 @@ describe("ToolCallReports", () => {
     });
 });
 
+describe("ToolCallReports turn end", () => {
+    it("forgets open tool calls of the ended session only", () => {
+        const reports = new ToolCallReports();
+        const start = (sessionId: string) => reports.prepare(sessionId, {
+            sessionUpdate: "tool_call",
+            toolCallId: "tool-1",
+            title: "Run",
+            status: "in_progress",
+        });
+        const repeat = (sessionId: string) => reports.prepare(sessionId, {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "tool-1",
+            title: "Run",
+        });
+        start("ended");
+        start("other");
+
+        reports.releaseOpen("ended");
+
+        expect(repeat("ended")).toEqual({sessionUpdate: "tool_call_update", toolCallId: "tool-1", title: "Run"});
+        expect(repeat("other")).toBeNull();
+    });
+});
+
 describe("ToolCallReports late output", () => {
     it("drops output chunks that arrive after the tool call finished", () => {
         const reports = new ToolCallReports();
