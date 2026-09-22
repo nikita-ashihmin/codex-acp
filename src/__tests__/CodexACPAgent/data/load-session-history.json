@@ -326,6 +326,15 @@
             "includeDisabled": false
           }
         },
+        "rawOutput": {
+          "contentItems": [
+            {
+              "type": "inputText",
+              "text": "Done"
+            }
+          ],
+          "success": true
+        },
         "name": "list_apps"
       }
     }

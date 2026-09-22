@@ -27,7 +27,11 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "plain-tool",
-        "status": "completed"
+        "status": "completed",
+        "rawOutput": {
+          "contentItems": null,
+          "success": true
+        }
       }
     }
   ]
@@ -61,7 +65,11 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "functions.tool",
-        "status": "completed"
+        "status": "completed",
+        "rawOutput": {
+          "contentItems": null,
+          "success": true
+        }
       }
     }
   ]
@@ -95,7 +103,11 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "toolstool",
-        "status": "completed"
+        "status": "completed",
+        "rawOutput": {
+          "contentItems": null,
+          "success": true
+        }
       }
     }
   ]

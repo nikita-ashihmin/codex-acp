@@ -186,8 +186,26 @@ export async function createDynamicToolCallUpdate(
     item: ThreadItem & { type: "dynamicToolCall" }
 ): Promise<UpdateSessionEvent> {
     return {
-        ...await createExecuteToolCallUpdate(item, item.tool, { arguments: item.arguments }),
+        ...await createExecuteToolCallUpdate(
+            item,
+            item.tool,
+            { arguments: item.arguments },
+            createDynamicToolRawOutput(item),
+        ),
         name: functionToolName(item.tool, item.namespace),
+    };
+}
+
+/** Returns the tool result, or `undefined` while Codex has no result. */
+export function createDynamicToolRawOutput(
+    item: ThreadItem & { type: "dynamicToolCall" }
+): Record<string, JsonValue> | undefined {
+    if (item.contentItems === null && item.success === null) {
+        return undefined;
+    }
+    return {
+        contentItems: item.contentItems,
+        success: item.success,
     };
 }
 

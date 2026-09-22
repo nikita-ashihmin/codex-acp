@@ -47,6 +47,7 @@ import {
     createContextCompactionCompleteUpdate,
     createContextCompactionStartUpdate,
     createDynamicToolCallUpdate,
+    createDynamicToolRawOutput,
     createFileChangeUpdate,
     createGuardianApprovalReviewToolCall,
     createGuardianApprovalReviewToolCallUpdate,
@@ -869,6 +870,7 @@ export class CodexEventHandler {
                     toolCallId: event.item.id,
                     name: functionToolName(event.item.tool, event.item.namespace),
                     status: event.item.status === "completed" ? "completed" : "failed",
+                    rawOutput: createDynamicToolRawOutput(event.item),
                 }
             case "mcpToolCall":
                 return {
