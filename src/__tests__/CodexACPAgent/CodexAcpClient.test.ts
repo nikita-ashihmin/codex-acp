@@ -1028,7 +1028,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             const dump = mockFixture.getAcpConnectionDump([]);
             expect(dump).toContain('"sessionId": "thread-id"');
             expect(dump).toContain('"sessionUpdate": "tool_call"');
-            expect(dump).toContain('"toolCallId": "mcp_startup.broken-mcp"');
+            expect(dump).toMatch(/"toolCallId": "mcp_startup\.broken-mcp\.[0-9a-f-]{36}"/);
             expect(dump).toContain('MCP server `broken-mcp` failed to start: boom');
         });
 

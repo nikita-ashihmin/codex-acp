@@ -1,6 +1,7 @@
 import {describe, expect, it} from "vitest";
 import type {ServerNotification} from "../../app-server";
 import type {ThreadItem} from "../../app-server/v2";
+import {CodexEventHandler} from "../../CodexEventHandler";
 import {createCommandExecutionCompleteUpdate} from "../../CodexToolCallMapper";
 import {parseResponseItemHistoryFallback} from "../../ResponseItemHistoryFallback";
 import {createCodexMockTestFixture, createTestSessionState, setupPromptAndSendNotifications} from "../acp-test-utils";
@@ -140,5 +141,18 @@ describe("late output deltas", () => {
         const dump = fixture.getAcpConnectionDump([]);
         expect(dump).not.toContain("late-command-output");
         expect(dump).not.toContain("late-mcp-output");
+    });
+});
+
+describe("MCP startup tool call ids", () => {
+    it("gives each startup report a unique tool call id", () => {
+        const event = {ready: [], failed: [{server: "broken", error: "boom", failureReason: null}], cancelled: ["slow"]};
+        const first = CodexEventHandler.createMcpStartupUpdates(event as never);
+        const second = CodexEventHandler.createMcpStartupUpdates(event as never);
+        const ids = [...first, ...second].map(update => update.sessionUpdate === "tool_call" ? update.toolCallId : "");
+
+        expect(new Set(ids).size).toBe(4);
+        expect(ids[0]).toMatch(/^mcp_startup\.broken\./);
+        expect(ids[1]).toMatch(/^mcp_startup\.slow\./);
     });
 });

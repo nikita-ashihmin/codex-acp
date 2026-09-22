@@ -1105,8 +1105,9 @@ export class CodexEventHandler {
         };
     }
 
+    /** Each startup report is a new tool call, so a later report for the same server cannot replace it. */
     private static getMcpStartupToolCallId(serverName: string): string {
-        return `mcp_startup.${encodeURIComponent(serverName)}`;
+        return `mcp_startup.${encodeURIComponent(serverName)}.${randomUUID()}`;
     }
 
     private completeCommandExecutionEvent(item: ThreadItem & { "type": "commandExecution" }): UpdateSessionEvent {
