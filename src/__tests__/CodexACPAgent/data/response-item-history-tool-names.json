@@ -82,8 +82,14 @@
     "sessionUpdate": "tool_call_update",
     "toolCallId": "call-search",
     "status": "completed",
-    "rawOutput": {
-      "output": "Chunk ID: search\nProcess exited with code 0\nOutput:\nsrc/index.ts\n"
-    }
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "Chunk ID: search\nProcess exited with code 0\nOutput:\nsrc/index.ts\n"
+        }
+      }
+    ]
   }
 ]

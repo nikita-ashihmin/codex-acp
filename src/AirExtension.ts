@@ -51,6 +51,17 @@ export function withAirMeta(
     };
 }
 
+/**
+ * Tells whether the client is AIR.
+ * A client is AIR when `clientCapabilities._meta.jetbrains.air` is present.
+ */
+export function isAirClient(capabilities: ClientCapabilities | null | undefined): boolean {
+    const meta = asRecord(capabilities?._meta);
+    const jetbrains = asRecord(meta[JETBRAINS_META_KEY]);
+    const air = jetbrains[AIR_META_KEY];
+    return air !== null && typeof air === "object" && !Array.isArray(air);
+}
+
 export function clientSupportsAirCapability(
     capabilities: ClientCapabilities | null | undefined,
     capability: string,

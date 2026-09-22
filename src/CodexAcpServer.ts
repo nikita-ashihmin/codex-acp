@@ -109,7 +109,8 @@ import {
 import packageJson from "../package.json";
 import {isJetBrains2026_1Client} from "./JBUtils";
 import {
-    clientSupportsTerminalOutputDelta,
+    type CommandOutputChannel,
+    resolveCommandOutputChannel,
     resolveTerminalOutputMode,
     type TerminalOutputMode,
 } from "./TerminalOutputMode";
@@ -191,7 +192,7 @@ export interface SessionState {
     currentModelSupportsFast: boolean;
     sessionMcpServers?: Array<string>;
     terminalOutputMode: TerminalOutputMode;
-    terminalOutputDeltaSupported: boolean;
+    commandOutputChannel: CommandOutputChannel;
     currentGoal?: ThreadGoalSnapshot | null;
     goalRevision: number;
     sessionTitle: string | null;
@@ -282,7 +283,7 @@ export class CodexAcpServer {
     private clientInfo: acp.Implementation | null;
     private clientCapabilities: acp.ClientCapabilities | null;
     private terminalOutputMode: TerminalOutputMode;
-    private terminalOutputDeltaSupported: boolean;
+    private commandOutputChannel: CommandOutputChannel;
     private booleanConfigOptionsSupported: boolean;
     /** Last `authStatus` pushed to the client; used to suppress duplicates. */
     private currentAuthStatus: AuthStatus | null;
@@ -332,7 +333,7 @@ export class CodexAcpServer {
         this.clientInfo = null;
         this.clientCapabilities = null;
         this.terminalOutputMode = "terminal_output_delta";
-        this.terminalOutputDeltaSupported = false;
+        this.commandOutputChannel = "rawOutput";
         this.booleanConfigOptionsSupported = false;
         this.currentAuthStatus = null;
         this.availableCommands = this.createAvailableCommands(codexAcpClient);
@@ -356,7 +357,7 @@ export class CodexAcpServer {
         this.clientCapabilities = _params.clientCapabilities ?? null;
         this.initializeRequest = _params;
         this.terminalOutputMode = resolveTerminalOutputMode(_params.clientCapabilities);
-        this.terminalOutputDeltaSupported = clientSupportsTerminalOutputDelta(_params.clientCapabilities);
+        this.commandOutputChannel = resolveCommandOutputChannel(_params.clientCapabilities);
         this.booleanConfigOptionsSupported = clientSupportsBooleanConfigOptions(_params.clientCapabilities);
         await this.runWithProcessCheck(() => this.codexAcpClient.initialize(_params));
         this.publishFirstAuthStatusAfterResponse();
@@ -706,7 +707,7 @@ export class CodexAcpServer {
             currentModelSupportsFast: currentModelSupportsFast,
             sessionMcpServers: sessionMcpServers,
             terminalOutputMode: this.terminalOutputMode,
-            terminalOutputDeltaSupported: this.terminalOutputDeltaSupported,
+            commandOutputChannel: this.commandOutputChannel,
             goalRevision: 0,
             sessionTitle: null,
             sessionTitleSource: operation === "resume" ? "unknown" : "unset",
@@ -1964,7 +1965,7 @@ export class CodexAcpServer {
             currentModelSupportsFast: currentModelSupportsFast,
             sessionMcpServers: sessionMcpServers,
             terminalOutputMode: this.terminalOutputMode,
-            terminalOutputDeltaSupported: this.terminalOutputDeltaSupported,
+            commandOutputChannel: this.commandOutputChannel,
             goalRevision: 0,
             sessionTitle: null,
             sessionTitleSource: "unset",
@@ -2024,7 +2025,7 @@ export class CodexAcpServer {
         const responseItemFallbackUpdates = await createResponseItemHistoryFallbackUpdates(
             thread,
             sessionState.terminalOutputMode,
-            sessionState.terminalOutputDeltaSupported,
+            sessionState.commandOutputChannel,
         );
 
         const threadUpdates: UpdateSessionEvent[] = [];
@@ -2286,7 +2287,7 @@ export class CodexAcpServer {
                 if (item.status !== "inProgress") {
                     updates.push(createCommandExecutionCompleteUpdate(item, {
                         terminalOutputMode: sessionState.terminalOutputMode,
-                        terminalOutputDeltaSupported: sessionState.terminalOutputDeltaSupported,
+                        channel: sessionState.commandOutputChannel,
                         hasTerminal: commandExecutionUsesTerminalOutput(item),
                         outputStreamed: false,
                     }));

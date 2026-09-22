@@ -31,6 +31,7 @@ import type {
 import type { JsonValue } from "./app-server/serde_json/JsonValue";
 import {logger} from "./Logger";
 import {
+    type CommandOutputChannel,
     createTerminalOutputMeta,
     type TerminalOutputMode,
 } from "./TerminalOutputMode";
@@ -110,18 +111,18 @@ export async function createCommandExecutionUpdate(item: CommandExecutionItem): 
 /**
  * Describes how the client reads command output and what the adapter already sent.
  *
- * A client that advertises `terminal_output_delta` reads the output only from the terminal metadata.
- * The adapter then omits `rawOutput.formatted_output`.
- * Other clients keep both channels, because a legacy client reads either the terminal metadata or the final raw output.
- * Each channel carries the output once: as streamed chunks or as one final chunk, never both.
+ * The output of a shell command goes to one channel per client, see `CommandOutputChannel`.
+ * A read, search or list command has no terminal, so its output goes once to `content` for every client.
  */
 export type CommandOutputDelivery = {
     terminalOutputMode: TerminalOutputMode;
-    terminalOutputDeltaSupported: boolean;
+    channel: CommandOutputChannel;
     /** The tool call shows a terminal. */
     hasTerminal: boolean;
     /** The adapter already streamed output chunks for this tool call. */
     outputStreamed: boolean;
+    /** The output that the adapter collected when Codex does not supply the aggregated output. */
+    collectedOutput?: string;
 };
 
 /**
@@ -132,40 +133,39 @@ export function createCommandExecutionCompleteUpdate(
     delivery: CommandOutputDelivery,
     name?: string,
 ): UpdateSessionEvent {
+    const output = item.aggregatedOutput ?? delivery.collectedOutput ?? "";
     const update: UpdateSessionEvent = {
         sessionUpdate: "tool_call_update",
         toolCallId: item.id,
         ...(name === undefined ? {} : {name}),
         status: item.status === "completed" ? "completed" : "failed",
-        ...(delivery.terminalOutputDeltaSupported ? {} : {
+    };
+    if (!delivery.hasTerminal) {
+        return output.length > 0
+            ? {...update, content: [createContent({type: "text", text: output})]}
+            : update;
+    }
+    if (delivery.channel === "rawOutput") {
+        return {
+            ...update,
             rawOutput: {
-                formatted_output: item.aggregatedOutput ?? "",
+                formatted_output: output,
                 exit_code: item.exitCode,
             },
-        }),
-    };
-
-    const terminalMeta: Record<string, unknown> = {};
-    if (!delivery.outputStreamed && item.aggregatedOutput
-        && (delivery.hasTerminal || delivery.terminalOutputDeltaSupported)) {
-        Object.assign(
-            terminalMeta,
-            createTerminalOutputMeta(delivery.terminalOutputMode, item.id, item.aggregatedOutput),
-        );
-    }
-    if (delivery.hasTerminal) {
-        terminalMeta["terminal_exit"] = {
-            exit_code: item.exitCode,
-            signal: null,
-            terminal_id: item.id,
         };
-    }
-    if (Object.keys(terminalMeta).length === 0) {
-        return update;
     }
     return {
         ...update,
-        _meta: terminalMeta,
+        _meta: {
+            ...(!delivery.outputStreamed && output.length > 0
+                ? createTerminalOutputMeta(delivery.terminalOutputMode, item.id, output)
+                : {}),
+            terminal_exit: {
+                exit_code: item.exitCode,
+                signal: null,
+                terminal_id: item.id,
+            },
+        },
     };
 }
 

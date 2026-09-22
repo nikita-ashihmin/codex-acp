@@ -5,7 +5,7 @@ import type { UpdateSessionEvent } from "./ACPSessionConnection";
 import { stripShellPrefix } from "./CommandUtils";
 import type { CommandAction, Thread, ThreadItem } from "./app-server/v2";
 import { createCommandActionEvent } from "./CodexToolCallMapper";
-import { createTerminalOutputMeta, type TerminalOutputMode } from "./TerminalOutputMode";
+import { type CommandOutputChannel, createTerminalOutputMeta, type TerminalOutputMode } from "./TerminalOutputMode";
 import { createAgentMessageChunk, createMessagePhaseMeta } from "./ContentChunks";
 import { functionToolName } from "./ToolCallName";
 
@@ -42,7 +42,7 @@ function historyFallbackUpdateKey(update: UpdateSessionEvent): string | null {
 export async function createResponseItemHistoryFallbackUpdates(
     thread: Thread,
     terminalOutputMode: TerminalOutputMode,
-    terminalOutputDeltaSupported = false,
+    commandOutputChannel: CommandOutputChannel = "rawOutput",
 ): Promise<UpdateSessionEvent[] | null> {
     if (!thread.path) {
         return null;
@@ -59,7 +59,7 @@ export async function createResponseItemHistoryFallbackUpdates(
         contents,
         terminalOutputMode,
         toolCallIdsFromThread(thread),
-        terminalOutputDeltaSupported,
+        commandOutputChannel,
     );
 }
 
@@ -67,7 +67,7 @@ export function parseResponseItemHistoryFallback(
     contents: string,
     terminalOutputMode: TerminalOutputMode,
     existingToolCallIds: Set<string> = new Set(),
-    terminalOutputDeltaSupported = false,
+    commandOutputChannel: CommandOutputChannel = "rawOutput",
 ): UpdateSessionEvent[] | null {
     const updates: UpdateSessionEvent[] = [];
     const terminalToolCallIds = new Set<string>();
@@ -146,7 +146,7 @@ export function parseResponseItemHistoryFallback(
                     terminalOutputMode,
                     terminalToolCallIds,
                     execToolCallIds,
-                    terminalOutputDeltaSupported,
+                    commandOutputChannel,
                 );
                 if (update) {
                     pushUpdates([update]);
@@ -421,7 +421,7 @@ function createFunctionCallOutputUpdate(
     terminalOutputMode: TerminalOutputMode,
     terminalToolCallIds: Set<string>,
     execToolCallIds: Set<string>,
-    terminalOutputDeltaSupported: boolean,
+    commandOutputChannel: CommandOutputChannel,
 ): UpdateSessionEvent | null {
     const toolCallId = stringValue(item["call_id"]);
     if (!toolCallId) {
@@ -432,6 +432,15 @@ function createFunctionCallOutputUpdate(
     const exitCode = parseExitCode(item["output"], output);
     const status = statusFromExitCode(exitCode, output, execToolCallIds.has(toolCallId));
     if (!terminalToolCallIds.has(toolCallId)) {
+        // A read, search or list command shows its output as the result.
+        if (execToolCallIds.has(toolCallId)) {
+            return {
+                sessionUpdate: "tool_call_update",
+                toolCallId,
+                status,
+                ...(output.length > 0 ? {content: [{type: "content", content: {type: "text", text: output}}]} : {}),
+            };
+        }
         return {
             sessionUpdate: "tool_call_update",
             toolCallId,
@@ -440,29 +449,30 @@ function createFunctionCallOutputUpdate(
         };
     }
 
-    const meta: Record<string, unknown> = {
-        terminal_exit: {
-            exit_code: exitCode,
-            signal: null,
-            terminal_id: toolCallId,
-        },
-    };
-    if (output.length > 0) {
-        Object.assign(meta, createTerminalOutputMeta(terminalOutputMode, toolCallId, output));
-    }
-
-    return {
-        sessionUpdate: "tool_call_update",
-        toolCallId,
-        status,
-        // A client with terminal output deltas reads the output from the terminal metadata only.
-        ...(terminalOutputDeltaSupported ? {} : {
+    // The output goes to one channel, see `CommandOutputChannel`.
+    if (commandOutputChannel === "rawOutput") {
+        return {
+            sessionUpdate: "tool_call_update",
+            toolCallId,
+            status,
             rawOutput: {
                 formatted_output: output,
                 exit_code: exitCode,
             },
-        }),
-        _meta: meta,
+        };
+    }
+    return {
+        sessionUpdate: "tool_call_update",
+        toolCallId,
+        status,
+        _meta: {
+            ...(output.length > 0 ? createTerminalOutputMeta(terminalOutputMode, toolCallId, output) : {}),
+            terminal_exit: {
+                exit_code: exitCode,
+                signal: null,
+                terminal_id: toolCallId,
+            },
+        },
     };
 }
 

@@ -132,7 +132,7 @@ describe('CodexEventHandler - terminal output events', () => {
     it('should send one delta when command completion has no streamed output', async () => {
         const deltaSessionState = createTestSessionState({
             sessionId,
-            terminalOutputDeltaSupported: true,
+            commandOutputChannel: "terminal",
         });
         const commandCompletedNotification: ServerNotification = {
             method: 'item/completed',
@@ -228,7 +228,7 @@ describe('CodexEventHandler - terminal output events', () => {
     it('should handle full terminal output flow: start -> delta -> complete', async () => {
         const deltaSessionState = createTestSessionState({
             sessionId,
-            terminalOutputDeltaSupported: true,
+            commandOutputChannel: "terminal",
         });
         const commandStartNotification: ServerNotification = {
             method: 'item/started',
@@ -448,7 +448,7 @@ describe('CodexEventHandler - terminal output events', () => {
         );
     });
 
-    it('should keep parsed non-terminal command output on legacy delta metadata', async () => {
+    it('should send parsed non-terminal command output once in the content', async () => {
         const terminalOutputSessionState = createTestSessionState({
             sessionId,
             currentModelId: 'model-id[effort]',

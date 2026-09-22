@@ -203,6 +203,7 @@ const STRUCTURED_CODEX_ERROR_CATEGORIES = {
 export class CodexEventHandler {
 
     private static readonly PLAN_UPDATE_INTERVAL_MS = 150;
+    private static readonly MAX_COLLECTED_COMMAND_OUTPUT = 1024 * 1024;
 
     private readonly sessionState: SessionState;
     private readonly supportsPlanUpdates: boolean;
@@ -229,8 +230,11 @@ export class CodexEventHandler {
     private planUpdateChain: Promise<void> = Promise.resolve();
     private disposed = false;
     private readonly seenReasoningDeltaItemIds = new Set<string>();
-    private readonly terminalCommandIds = new Set<string>();
+    /** Read, search and list commands. Their output goes once to the completion content. */
+    private readonly nonTerminalCommandIds = new Set<string>();
     private readonly commandOutputIds = new Set<string>();
+    /** Output of commands whose output does not stream, for a completion without the aggregated output. */
+    private readonly collectedCommandOutput = new Map<string, string>();
     private readonly agentMessagePhases = new Map<string, string | null>();
     private readonly turnDiffs = new Map<string, string>();
     private readonly oversizedTurnDiffs = new Set<string>();
@@ -810,11 +814,12 @@ export class CodexEventHandler {
                 return await createFileChangeUpdate(event.item, this.supportsDiffPatch);
             case "commandExecution": {
                 if (commandExecutionUsesTerminalOutput(event.item)) {
-                    this.terminalCommandIds.add(event.item.id);
+                    this.nonTerminalCommandIds.delete(event.item.id);
                 } else {
-                    this.terminalCommandIds.delete(event.item.id);
-                    this.commandOutputIds.delete(event.item.id);
+                    this.nonTerminalCommandIds.add(event.item.id);
                 }
+                this.commandOutputIds.delete(event.item.id);
+                this.collectedCommandOutput.delete(event.item.id);
                 return await createCommandExecutionUpdate(event.item);
             }
             case "mcpToolCall":
@@ -1028,11 +1033,26 @@ export class CodexEventHandler {
         return createAgentTextMessageChunk("*Context compacted to fit the model's context window.*\n\n");
     }
 
-    private createCommandOutputDeltaEvent(event: CommandExecutionOutputDeltaNotification): UpdateSessionEvent {
+    /**
+     * Streams the output of a shell command in the terminal channel.
+     * The adapter collects other output and sends it once with the completion.
+     */
+    private createCommandOutputDeltaEvent(event: CommandExecutionOutputDeltaNotification): UpdateSessionEvent | null {
+        if (this.sessionState.commandOutputChannel === "rawOutput" || this.nonTerminalCommandIds.has(event.itemId)) {
+            this.collectCommandOutput(event.itemId, event.delta);
+            return null;
+        }
         if (event.delta.length > 0) {
             this.commandOutputIds.add(event.itemId);
         }
-        return this.createCommandOutputEvent(event.itemId, event.delta, this.commandOutputMode(event.itemId));
+        return this.createCommandOutputEvent(event.itemId, event.delta, this.sessionState.terminalOutputMode);
+    }
+
+    private collectCommandOutput(itemId: string, delta: string): void {
+        const collected = (this.collectedCommandOutput.get(itemId) ?? "") + delta;
+        this.collectedCommandOutput.set(itemId, collected.length > CodexEventHandler.MAX_COLLECTED_COMMAND_OUTPUT
+            ? collected.slice(collected.length - CodexEventHandler.MAX_COLLECTED_COMMAND_OUTPUT)
+            : collected);
     }
 
     private createCommandOutputEvent(
@@ -1047,20 +1067,13 @@ export class CodexEventHandler {
         }
     }
 
-    private createTerminalInteractionEvent(event: TerminalInteractionNotification): UpdateSessionEvent {
+    private createTerminalInteractionEvent(event: TerminalInteractionNotification): UpdateSessionEvent | null {
         return this.createCommandOutputDeltaEvent({
             threadId: event.threadId,
             turnId: event.turnId,
             itemId: event.itemId,
             delta: `\n${event.stdin}\n`,
         });
-    }
-
-    private commandOutputMode(itemId: string): TerminalOutputMode {
-        if (this.sessionState.terminalOutputMode === "terminal_output" && !this.terminalCommandIds.has(itemId)) {
-            return "terminal_output_delta";
-        }
-        return this.sessionState.terminalOutputMode;
     }
 
     private createMcpToolProgressEvent(event: { itemId: string, message: string }): UpdateSessionEvent {
@@ -1112,11 +1125,15 @@ export class CodexEventHandler {
     }
 
     private completeCommandExecutionEvent(item: ThreadItem & { "type": "commandExecution" }): UpdateSessionEvent {
+        this.nonTerminalCommandIds.delete(item.id);
+        const collectedOutput = this.collectedCommandOutput.get(item.id);
+        this.collectedCommandOutput.delete(item.id);
         return createCommandExecutionCompleteUpdate(item, {
             terminalOutputMode: this.sessionState.terminalOutputMode,
-            terminalOutputDeltaSupported: this.sessionState.terminalOutputDeltaSupported,
-            hasTerminal: this.terminalCommandIds.delete(item.id),
+            channel: this.sessionState.commandOutputChannel,
+            hasTerminal: commandExecutionUsesTerminalOutput(item),
             outputStreamed: this.commandOutputIds.delete(item.id),
+            ...(collectedOutput === undefined ? {} : {collectedOutput}),
         }, commandToolName(item.source));
     }
 

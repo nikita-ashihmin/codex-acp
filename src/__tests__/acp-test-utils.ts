@@ -420,7 +420,7 @@ export function createTestSessionState(overrides?: Partial<SessionState>): Sessi
         fastModeEnabled: false,
         currentModelSupportsFast: false,
         terminalOutputMode: "terminal_output_delta",
-        terminalOutputDeltaSupported: false,
+        commandOutputChannel: "terminal",
         goalRevision: 0,
         sessionTitle: null,
         sessionTitleSource: "unknown",
