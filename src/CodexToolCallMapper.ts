@@ -1,6 +1,7 @@
 import type { ContentBlock, ToolCallContent } from "@agentclientprotocol/sdk";
-import { applyPatch, parsePatch, reversePatch } from "diff";
+import { applyPatch, parsePatch, reversePatch, type StructuredPatch } from "diff";
 import { AIR_DIFF_PATCH_KEY, withAirMeta } from "./AirExtension";
+import { createAddedFileGitPatch, createDeletedFileGitPatch, createUpdateGitPatch } from "./GitPatch";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { UpdateSessionEvent } from "./ACPSessionConnection";
@@ -873,11 +874,11 @@ async function createPatchContent(
     try {
         switch (change.kind.type) {
             case "add":
-                return await createAddFileContent(change, supportsDiffPatch);
+                return createAddFileContent(change, supportsDiffPatch);
             case "delete":
-                return await createDeleteFileContent(change, supportsDiffPatch);
+                return createDeleteFileContent(change, supportsDiffPatch);
             case "update":
-                return await createUpdateFileContent(change, supportsDiffPatch);
+                return await createUpdateFileContent(change, change.kind.move_path, supportsDiffPatch);
         }
     } catch (error) {
         logger.log(`Error processing file update change: ${error}`);
@@ -885,21 +886,19 @@ async function createPatchContent(
     }
 }
 
-async function createAddFileContent(
+function createAddFileContent(
     change: FileUpdateChange,
     supportsDiffPatch: boolean,
-): Promise<ToolCallContent | null> {
-    if (supportsDiffPatch) {
-        return createPatchOnlyContent(
-            change.path,
-            "add",
-            createWholeFilePatch(change.path, null, change.diff),
-        );
+): ToolCallContent {
+    // app-server always returns file content instead of diff
+    const patch = supportsDiffPatch ? createAddedFileGitPatch(change.path, change.diff) : null;
+    if (patch !== null) {
+        return createPatchOnlyContent(change.path, "add", patch);
     }
     return {
         type: "diff",
         oldText: null,
-        newText: change.diff, // app-server always returns file content instead of diff
+        newText: change.diff,
         path: change.path,
         _meta: { kind: "add" },
     };
@@ -907,23 +906,22 @@ async function createAddFileContent(
 
 async function createUpdateFileContent(
     change: FileUpdateChange,
+    movePath: string | null,
     supportsDiffPatch: boolean,
 ): Promise<ToolCallContent | null> {
-    if (change.kind.type !== "update") return null;
-
     const unifiedDiff = recoverCorruptedDiff(change.diff);
-    const patches = parsePatch(unifiedDiff);
-    if (patches.length !== 1) return null;
-    const patch = patches[0]!;
-    const movePath = change.kind.move_path;
+    const targetPath = movePath ?? change.path;
 
-    if (supportsDiffPatch) {
-        const targetPath = movePath ?? change.path;
-        return createPatchOnlyContent(
-            targetPath,
-            "update",
-            withGitPatchHeader(change.path, targetPath, unifiedDiff),
-        );
+    const gitPatch = supportsDiffPatch ? createUpdateGitPatch(change.path, targetPath, unifiedDiff) : null;
+    if (gitPatch !== null) {
+        return createPatchOnlyContent(targetPath, "update", gitPatch);
+    }
+
+    // The standard diff needs the file text, so it reads the file and applies the Codex hunks.
+    const patch = parseSinglePatch(unifiedDiff);
+    if (patch === null) {
+        logger.log("Skipped a file change whose diff has no single valid patch", {path: change.path});
+        return null;
     }
 
     const oldContent = await readFileContent(change.path);
@@ -934,11 +932,11 @@ async function createUpdateFileContent(
             // we can verify this by checking if the reverted patch applies.
             const revertedContent = applyPatch(oldContent, reversePatch(patch));
             if (revertedContent !== false) {
-                return createUpdateDiffContent(change.path, revertedContent, oldContent);
+                return createUpdateDiffContent(targetPath, revertedContent, oldContent);
             }
             return null;
         }
-        return createUpdateDiffContent(movePath ?? change.path, oldContent, patchedContent);
+        return createUpdateDiffContent(targetPath, oldContent, patchedContent);
     }
 
     if (!movePath) return null;
@@ -951,6 +949,15 @@ async function createUpdateFileContent(
     return createUpdateDiffContent(movePath, revertedContent, newContent);
 }
 
+function parseSinglePatch(diff: string): StructuredPatch | null {
+    try {
+        const patches = parsePatch(diff);
+        return patches.length === 1 ? patches[0]! : null;
+    } catch {
+        return null;
+    }
+}
+
 function createUpdateDiffContent(path: string, oldText: string, newText: string): ToolCallContent {
     return {
         type: "diff",
@@ -961,24 +968,22 @@ function createUpdateDiffContent(path: string, oldText: string, newText: string)
     };
 }
 
-async function createDeleteFileContent(
+function createDeleteFileContent(
     change: FileUpdateChange,
     supportsDiffPatch: boolean,
-): Promise<ToolCallContent> {
-    if (supportsDiffPatch) {
-        return createPatchOnlyContent(
-            change.path,
-            "delete",
-            createWholeFilePatch(change.path, change.diff, null),
-        );
+): ToolCallContent {
+    // app-server always returns file content instead of diff
+    const patch = supportsDiffPatch ? createDeletedFileGitPatch(change.path, change.diff) : null;
+    if (patch !== null) {
+        return createPatchOnlyContent(change.path, "delete", patch);
     }
     return {
         type: "diff",
-        oldText: change.diff, // app-server always returns file content instead of diff
+        oldText: change.diff,
         newText: "",
         path: change.path,
         _meta: { kind: "delete" },
-    }
+    };
 }
 
 function createPatchOnlyContent(path: string, kind: string, patch: string): ToolCallContent {
@@ -993,38 +998,6 @@ function createPatchOnlyContent(path: string, kind: string, patch: string): Tool
             text: patch,
         }),
     };
-}
-
-function withGitPatchHeader(oldPath: string, newPath: string, diff: string): string {
-    const body = diff.startsWith("--- ")
-        ? diff
-        : `--- a/${oldPath}\n+++ b/${newPath}\n${diff}`;
-    return `diff --git a/${oldPath} b/${newPath}\n${body.replace(/\n?$/, "\n")}`;
-}
-
-function createWholeFilePatch(path: string, oldText: string | null, newText: string | null): string {
-    const oldLines = splitPatchLines(oldText);
-    const newLines = splitPatchLines(newText);
-    const oldRange = oldLines.length === 0 ? "0,0" : `1,${oldLines.length}`;
-    const newRange = newLines.length === 0 ? "0,0" : `1,${newLines.length}`;
-    return [
-        `diff --git a/${path} b/${path}`,
-        `--- ${oldText === null ? "/dev/null" : `a/${path}`}`,
-        `+++ ${newText === null ? "/dev/null" : `b/${path}`}`,
-        `@@ -${oldRange} +${newRange} @@`,
-        ...oldLines.map((line) => `-${line}`),
-        ...newLines.map((line) => `+${line}`),
-        "",
-    ].join("\n");
-}
-
-function splitPatchLines(text: string | null): string[] {
-    if (!text) return [];
-    return text
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .replace(/\n$/, "")
-        .split("\n");
 }
 
 async function readFileContent(filePath: string): Promise<string | null> {

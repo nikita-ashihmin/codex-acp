@@ -579,4 +579,107 @@ Moved to: /test/project/NewFile.kt`,
         expect(patches[1]).toContain('+++ /dev/null');
         expect(patches[2]).toContain('@@ -1 +1 @@');
     });
+
+    describe('diff patch fallback', () => {
+        function onlyContent(event: Awaited<ReturnType<typeof createFileChangeUpdate>>) {
+            if (event.sessionUpdate !== 'tool_call') throw new Error('Expected a tool call');
+            expect(event.content).toHaveLength(1);
+            return event.content![0]!;
+        }
+
+        it('sends the standard diff when the patch mode is not negotiated', async () => {
+            const content = onlyContent(await createFileChangeUpdate({
+                type: 'fileChange',
+                id: 'legacy-delete',
+                changes: [{path: '/w/Old.kt', kind: {type: 'delete'}, diff: 'old line\n'}],
+                status: 'completed',
+            }, false));
+
+            expect(content).toEqual({
+                type: 'diff',
+                oldText: 'old line\n',
+                newText: '',
+                path: '/w/Old.kt',
+                _meta: {kind: 'delete'},
+            });
+        });
+
+        it.each([
+            {name: 'an empty added file', kind: {type: 'add' as const}, diff: '', expected: {oldText: null, newText: ''}},
+            {name: 'an empty deleted file', kind: {type: 'delete' as const}, diff: '', expected: {oldText: '', newText: ''}},
+            {name: 'a binary added file', kind: {type: 'add' as const}, diff: 'PNG\0data', expected: {oldText: null, newText: 'PNG\0data'}},
+        ])('sends the standard diff for $name', async ({kind, diff, expected}) => {
+            const content = onlyContent(await createFileChangeUpdate({
+                type: 'fileChange',
+                id: 'fallback',
+                changes: [{path: '/w/File', kind, diff}],
+                status: 'completed',
+            }, true));
+
+            expect(content).toMatchObject({type: 'diff', path: '/w/File', ...expected});
+            expect(JSON.stringify(content)).not.toContain('diffPatch');
+        });
+
+        it('sends the standard diff when the Codex hunks cannot form a valid patch', async () => {
+            mockFileContent('/w/Edit.kt', 'old\n');
+            const content = onlyContent(await createFileChangeUpdate({
+                type: 'fileChange',
+                id: 'fallback-update',
+                changes: [{
+                    path: '/w/Edit.kt',
+                    kind: {type: 'update', move_path: null},
+                    diff: 'Index: /w/Edit.kt\n@@ -1 +1 @@\n-old\n+new\n',
+                }],
+                status: 'completed',
+            }, true));
+
+            expect(content).toEqual({
+                type: 'diff',
+                oldText: 'old\n',
+                newText: 'new\n',
+                path: '/w/Edit.kt',
+                _meta: {kind: 'update'},
+            });
+        });
+
+        it('sends the standard diff for a pure rename', async () => {
+            mockFileContent('/w/New.kt', 'same\n');
+            const content = onlyContent(await createFileChangeUpdate({
+                type: 'fileChange',
+                id: 'pure-rename',
+                changes: [{path: '/w/Old.kt', kind: {type: 'update', move_path: '/w/New.kt'}, diff: ''}],
+                status: 'completed',
+            }, true));
+
+            expect(content).toMatchObject({type: 'diff', oldText: 'same\n', newText: 'same\n', path: '/w/New.kt'});
+        });
+
+        it('uses the target path of a rename in the patch block', async () => {
+            const content = onlyContent(await createFileChangeUpdate({
+                type: 'fileChange',
+                id: 'rename',
+                changes: [{
+                    path: '/w/Old.kt',
+                    kind: {type: 'update', move_path: '/w/New.kt'},
+                    diff: '@@ -1 +1 @@\n-old\n+new\n\n\nMoved to: /w/New.kt',
+                }],
+                status: 'completed',
+            }, true));
+
+            expect(content.type === 'diff' && content.path).toBe('/w/New.kt');
+            expect((content._meta as any).jetbrains.air.diffPatch.text).toContain('rename from w/Old.kt\nrename to w/New.kt\n');
+        });
+
+        it('uses the target path when the moved file is already patched', async () => {
+            mockFileContent('/w/Old.kt', 'new\n');
+            const content = onlyContent(await createFileChangeUpdate({
+                type: 'fileChange',
+                id: 'already-patched-move',
+                changes: [{path: '/w/Old.kt', kind: {type: 'update', move_path: '/w/New.kt'}, diff: '@@ -1 +1 @@\n-old\n+new\n'}],
+                status: 'completed',
+            }, false));
+
+            expect(content).toMatchObject({oldText: 'old\n', newText: 'new\n', path: '/w/New.kt'});
+        });
+    });
 });
