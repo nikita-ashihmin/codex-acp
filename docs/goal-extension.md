@@ -1,6 +1,6 @@
 # Goal extension
 
-This document defines an experimental ACP extension implemented by `codex-acp`. It is shaped like a possible future first-class ACP API. The metadata is in the AIR namespace `_meta.jetbrains.air.goal`, as the [AIR client profile](air-client-profile.md) defines. The adapter sends no other goal key.
+This document defines an experimental ACP extension implemented by `codex-acp`. It is shaped like a possible future first-class ACP API. The metadata is in the AIR namespace `_meta.jetbrains.air.goal`, as the [ACP tool call contract](acp-tool-call-contract.md) defines. The adapter sends no other goal key.
 
 ## Capability negotiation
 
