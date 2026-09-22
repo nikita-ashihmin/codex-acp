@@ -7,6 +7,7 @@ type CollabAgentToolCallItem = ThreadItem & {type: "collabAgentToolCall"};
 /**
  * Reports a Codex collaboration tool call, for a client without native subagent sessions.
  * The prompt is input that the user reads. The agent states are a result without a display form.
+ * A client that is not AIR gets the whole item in `rawInput`.
  */
 export class CollabAgentReporter {
     static started(item: CollabAgentToolCallItem): ToolFacts {
@@ -37,5 +38,18 @@ function facts(item: CollabAgentToolCallItem, report: ToolFacts["report"]): Tool
         },
         ...(Object.keys(item.agentsStates).length > 0 ? {opaqueResult: {agentsStates: item.agentsStates}} : {}),
         subagent: true,
+        standard: {
+            content: null,
+            rawInput: {
+                prompt: item.prompt,
+                senderThreadId: item.senderThreadId,
+                receiverThreadIds: item.receiverThreadIds,
+                agentsStates: item.agentsStates,
+                model: item.model,
+                reasoningEffort: item.reasoningEffort,
+                status: item.status,
+            },
+            rawOutput: null,
+        },
     };
 }

@@ -34,8 +34,8 @@ function occurrences(value: unknown, text: string): number {
     return serialized.split(JSON.stringify(text).slice(1, -1)).length - 1;
 }
 
-const DELTA_CLIENT = ClientCapabilities.DEFAULT.with({terminalOutputDelta: true});
-const ZED_CLIENT = ClientCapabilities.DEFAULT;
+const DELTA_CLIENT = ClientCapabilities.DEFAULT.with({airClient: true, terminalOutputDelta: true});
+const ZED_CLIENT = ClientCapabilities.DEFAULT.with({terminalOutput: true});
 
 function completion(item: CommandItem, capabilities: ClientCapabilities) {
     const reporter = new CommandReporter();
@@ -44,7 +44,7 @@ function completion(item: CommandItem, capabilities: ClientCapabilities) {
 }
 
 describe("command output is sent once", () => {
-    it("sends the output as terminal_output_delta to a client with output deltas", () => {
+    it("sends the output as terminal_output_delta to AIR", () => {
         expect(completion(command(), DELTA_CLIENT)).toEqual({
             sessionUpdate: "tool_call_update",
             toolCallId: "cmd-1",
@@ -76,23 +76,35 @@ describe("command output is sent once", () => {
             sessionUpdate: "tool_call_update",
             toolCallId: "cmd-1",
             status: "completed",
+            rawOutput: {formatted_output: "a.txt\nb.txt\n", exit_code: 0},
             _meta: {terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-1"}},
         });
     });
 
-    it("sends the output of a read command once in the content", () => {
-        for (const capabilities of [DELTA_CLIENT, ZED_CLIENT]) {
-            const update = completion(command({
-                commandActions: [{type: "read", command: "cat a.txt", name: "a.txt", path: "/workspace/a.txt"}],
-            }), capabilities);
+    it("sends the output of a read command once in the content to AIR", () => {
+        const update = completion(command({
+            commandActions: [{type: "read", command: "cat a.txt", name: "a.txt", path: "/workspace/a.txt"}],
+        }), DELTA_CLIENT);
 
-            expect(update).toEqual({
-                sessionUpdate: "tool_call_update",
-                toolCallId: "cmd-1",
-                status: "completed",
-                content: [{type: "content", content: {type: "text", text: "a.txt\nb.txt\n"}}],
-            });
-        }
+        expect(update).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            status: "completed",
+            content: [{type: "content", content: {type: "text", text: "a.txt\nb.txt\n"}}],
+        });
+    });
+
+    it("sends the output of a read command to Zed in rawOutput, as before the AIR contract", () => {
+        const update = completion(command({
+            commandActions: [{type: "read", command: "cat a.txt", name: "a.txt", path: "/workspace/a.txt"}],
+        }), ZED_CLIENT);
+
+        expect(update).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            status: "completed",
+            rawOutput: {formatted_output: "a.txt\nb.txt\n", exit_code: 0},
+        });
     });
 
     it("sends stdin as terminal_input and not as output", () => {
@@ -124,7 +136,7 @@ describe("command output is sent once", () => {
         expect(dump).not.toContain("exit_code\": 0,\n        \"formatted");
     });
 
-    it("sends the live output of a Zed-like client only as terminal_output chunks", async () => {
+    it("sends the live output of Zed as terminal_output chunks and the whole output in rawOutput", async () => {
         const fixture = createCodexMockTestFixture();
         const sessionId = "command-once-zed";
         await setupPromptAndSendNotifications(
@@ -135,10 +147,11 @@ describe("command output is sent once", () => {
         );
 
         const dump = fixture.getAcpConnectionDump([]);
-        expect(occurrences(dump, "a.txt\nb.txt\n")).toBe(1);
+        expect(occurrences(dump, "a.txt\nb.txt\n")).toBe(2);
         expect(dump).toContain("\"terminal_output\"");
         expect(dump).toContain("terminal_exit");
-        expect(dump).not.toContain("rawOutput");
+        expect(dump).toContain("formatted_output");
+        expect(dump).not.toContain("terminal_output_delta");
     });
 
     it("sends the streamed output of a read command once in the content", async () => {
@@ -158,19 +171,24 @@ describe("command output is sent once", () => {
         expect(dump).toContain("\"content\"");
     });
 
-    it("replays fallback history output only in the terminal channel", () => {
+    it("replays fallback history output only in the terminal channel for AIR, and also in rawOutput for Zed", () => {
         const jsonl = [
             {type: "response_item", payload: {type: "function_call", name: "exec_command", call_id: "call-1", arguments: JSON.stringify({cmd: "npm test", workdir: "/workspace", yield_time_ms: 1000})}},
             {type: "response_item", payload: {type: "function_call_output", call_id: "call-1", output: "Process exited with code 0\nOutput:\nfallback-output\n"}},
         ].map(line => JSON.stringify(line)).join("\n");
 
-        for (const capabilities of [DELTA_CLIENT, ZED_CLIENT]) {
-            const output = parseResponseItemHistoryFallback(jsonl, capabilities)
-                ?.find(update => update.sessionUpdate === "tool_call_update");
-            expect(output).not.toHaveProperty("rawOutput");
-            expect(occurrences(output, "fallback-output")).toBe(1);
-            expect(output).toHaveProperty("_meta.terminal_exit");
-        }
+        const air = parseResponseItemHistoryFallback(jsonl, DELTA_CLIENT)
+            ?.find(update => update.sessionUpdate === "tool_call_update");
+        expect(air).not.toHaveProperty("rawOutput");
+        expect(occurrences(air, "fallback-output")).toBe(1);
+        expect(air).toHaveProperty("_meta.terminal_exit");
+
+        const zed = parseResponseItemHistoryFallback(jsonl, ZED_CLIENT)
+            ?.find(update => update.sessionUpdate === "tool_call_update");
+        expect(occurrences(zed, "fallback-output")).toBe(2);
+        expect(zed).toHaveProperty("rawOutput.formatted_output");
+        expect(zed).toHaveProperty("_meta.terminal_output");
+        expect(zed).toHaveProperty("_meta.terminal_exit");
     });
 });
 

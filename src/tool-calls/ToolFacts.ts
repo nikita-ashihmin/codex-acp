@@ -42,6 +42,45 @@ export type ToolFacts = {
     mcp?: boolean;
     subagent?: boolean;
     contextCompaction?: ContextCompactionMetadata;
+    /** The fields of a client that is not AIR, where they differ from the fields above. */
+    standard?: StandardToolCallFields;
+};
+
+/**
+ * The report fields of a client without `_meta.jetbrains.air`, where they differ from the contract fields.
+ *
+ * Only AIR gets the fields of `docs/air-extensions.md#tool-call-contract`.
+ * Every other client keeps the fields that the adapter sent before that contract, so Zed and other ACP clients
+ * see no change. A present field replaces the rendered field, and `null` removes it.
+ * `AcpToolCallRenderer` applies these fields and never renders an AIR metadata key for such a client.
+ */
+export type StandardToolCallFields = {
+    title?: string;
+    kind?: acp.ToolKind;
+    status?: acp.ToolCallStatus;
+    locations?: string[] | null;
+    content?: acp.ToolCallContent[] | null;
+    rawInput?: unknown;
+    rawOutput?: unknown;
+    /**
+     * A chunk of command output, or the text written to the command stdin.
+     * It goes to the output channel that the client declares, see `ClientCapabilities.terminalOutputKey`.
+     */
+    commandOutput?: {data: string; terminal: boolean};
+    /** The end of a command: the output in `rawOutput.formatted_output`, the terminal output, and the exit. */
+    commandEnd?: CommandEnd;
+};
+
+export type CommandEnd = {
+    /** The whole output of the command. */
+    output: string;
+    exitCode: number | null;
+    /** The command shows a terminal. */
+    terminal: boolean;
+    /** Output or stdin chunks of the command came before the end. */
+    streamed: boolean;
+    /** The end comes from the thread history. */
+    replay: boolean;
 };
 
 /**
@@ -49,4 +88,6 @@ export type ToolFacts = {
  * A reporter sets only `toolCallId`, `title`, `input`, and the facts that the client does not have yet.
  */
 export type PermissionToolFacts = Omit<ToolFacts, "report" | "terminal" | "terminalOutput" | "terminalInput"
-    | "terminalExit" | "mcpProgress">;
+    | "terminalExit" | "mcpProgress" | "standard"> & {
+    standard?: Omit<StandardToolCallFields, "commandOutput" | "commandEnd">;
+};

@@ -68,8 +68,8 @@ describe("CodexPlanStream", () => {
         ]);
     });
 
-    it("streams message text to a client without plan updates and sends only the missing end", async () => {
-        const {stream} = createStream(ClientCapabilities.DEFAULT);
+    it("streams message text to AIR without plan updates and sends only the missing end", async () => {
+        const {stream} = createStream(ClientCapabilities.DEFAULT.with({airClient: true}));
 
         const first = stream.delta("plan", "# Plan\n");
         const completed = await stream.completed("plan", "# Plan\n1. Step");
@@ -78,6 +78,19 @@ describe("CodexPlanStream", () => {
         expect(completed).toMatchObject({
             text: "# Plan\n1. Step",
             update: {sessionUpdate: "agent_message_chunk", content: {text: "1. Step"}},
+        });
+    });
+
+    it("sends the whole plan once to another client without plan updates", async () => {
+        const {stream} = createStream(ClientCapabilities.DEFAULT);
+
+        const first = stream.delta("plan", "# Plan\n");
+        const completed = await stream.completed("plan", "# Plan\n1. Step");
+
+        expect(first).toBeNull();
+        expect(completed).toEqual({
+            text: "# Plan\n1. Step",
+            update: {sessionUpdate: "agent_message_chunk", messageId: "plan", content: {type: "text", text: "# Plan\n1. Step"}},
         });
     });
 });

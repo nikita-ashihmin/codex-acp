@@ -70,16 +70,28 @@ describe('CodexACPAgent - initialize', () => {
                 steering: {
                     supported: true,
                 },
-                jetbrains: {
-                    air: {
+            },
+        });
+    });
+
+    it('should advertise the AIR extension only to AIR', async () => {
+        const result = await agent.initialize({
+            protocolVersion: acp.PROTOCOL_VERSION,
+            clientCapabilities: {_meta: {jetbrains: {air: {version: 1, capabilities: []}}}},
+        });
+        expect(result._meta).toEqual({
+            steering: {
+                supported: true,
+            },
+            jetbrains: {
+                air: {
+                    version: 1,
+                    goal: {
                         version: 1,
-                        goal: {
-                            version: 1,
-                            controlMethod: "_session/goal",
-                            actions: ["set", "pause", "resume", "clear"],
-                        },
-                        capabilities: ["sessionFailure", "diffPatch", "agentFileChangeReport", "nativeSubagentSessions", "asyncTasks", "recommendedValue", "rawInputRendering", "planContentDelta"],
+                        controlMethod: "_session/goal",
+                        actions: ["set", "pause", "resume", "clear"],
                     },
+                    capabilities: ["sessionFailure", "diffPatch", "agentFileChangeReport", "nativeSubagentSessions", "asyncTasks", "recommendedValue", "rawInputRendering", "planContentDelta"],
                 },
             },
         });

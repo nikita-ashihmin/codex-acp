@@ -52,6 +52,7 @@ export class FileChangeReporter {
             title: FILE_CHANGE_TITLE,
             ...(item === undefined ? {kind: "edit", status: "pending"} : {}),
             locations: [...new Set(item?.changes.map(change => change.path) ?? [])],
+            standard: {kind: "edit", status: "pending", title: "Edit files"},
         };
     }
 }

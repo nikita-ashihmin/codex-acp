@@ -13,8 +13,10 @@ export class WebSearchReporter {
         return {...facts(item, "update"), status: "completed"};
     }
 
+    /** The replay of a web search. Every client gets the same `rawInput`. */
     static history(item: WebSearchItem): ToolFacts {
-        return {...facts(item, "start"), kind: "search", status: "completed"};
+        const {standard: _standard, ...replayed} = facts(item, "start");
+        return {...replayed, kind: "search", status: "completed"};
     }
 }
 
@@ -24,6 +26,8 @@ function facts(item: WebSearchItem, report: ToolFacts["report"]): ToolFacts {
         report,
         title: webSearchTitle(item),
         input: {query: item.query, action: item.action},
+        // A live report of a client that is not AIR also names the item.
+        standard: {rawInput: {type: item.type, id: item.id, query: item.query, action: item.action}},
     };
 }
 

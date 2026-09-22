@@ -23,6 +23,9 @@ const AIR = ClientCapabilities.from({
     },
 });
 const ZED = ClientCapabilities.from({_meta: {terminal_output: true}});
+const AIR_WITHOUT_RAW_INPUT_RENDERING = ClientCapabilities.from({
+    _meta: {terminal_output_delta: true, jetbrains: {air: {version: 1, capabilities: []}}},
+});
 
 const command = {
     type: "commandExecution", id: "cmd", pluginId: null, scriptPath: null, command: "/bin/zsh -lc 'npm test'",
@@ -103,30 +106,37 @@ describe("ACP tool call contract", () => {
         await expect(render(ZED)).toMatchFileSnapshot("data/tool-calls-zed.json");
     });
 
-    it("never sends the removed keys", () => {
-        for (const text of [render(AIR), render(ZED)]) {
-            expect(text).not.toContain("formatted_output");
-            expect(text).not.toContain("\"codex\"");
-        }
+    it("never sends the pre-contract keys to AIR", () => {
+        const text = render(AIR);
+        expect(text).not.toContain("formatted_output");
+        expect(text).not.toContain("\"codex\"");
     });
 
-    it("keeps the Zed terminal conventions", () => {
+    it("never sends an AIR key to Zed", () => {
+        expect(render(ZED)).not.toContain("jetbrains");
+    });
+
+    it("keeps the Zed terminal conventions and the command output in rawOutput", () => {
         const text = render(ZED);
         expect(text).toContain("terminal_info");
         expect(text).toContain("\"terminal_output\"");
         expect(text).toContain("terminal_exit");
-        expect(text).toContain("\"terminal_input\"");
+        expect(text).toContain("formatted_output");
+        expect(text).not.toContain("\"terminal_input\"");
         expect(text).not.toContain("terminal_output_delta");
     });
 
-    it("sends one display copy of readable input only to a client without AIR rawInputRendering", () => {
+    it("sends one display copy of readable input only to AIR without rawInputRendering", () => {
         const facts = CollabAgentReporter.started(collab as never);
         const zed = new AcpToolCallRenderer(ZED).render(facts);
         const air = new AcpToolCallRenderer(AIR).render(facts);
+        const airWithoutRendering = new AcpToolCallRenderer(AIR_WITHOUT_RAW_INPUT_RENDERING).render(facts);
 
-        expect(zed.content).toEqual([{type: "content", content: {type: "text", text: "Find the weather."}}]);
+        expect(airWithoutRendering.content).toEqual([{type: "content", content: {type: "text", text: "Find the weather."}}]);
         expect(air).not.toHaveProperty("content");
         expect(air.rawInput).toMatchObject({prompt: "Find the weather."});
+        expect(zed).not.toHaveProperty("content");
+        expect(zed.rawInput).toMatchObject({prompt: "Find the weather.", status: "completed"});
     });
 
     it("shows the question of a standalone elicitation only once for AIR", () => {
@@ -147,15 +157,19 @@ describe("ACP tool call contract", () => {
 });
 
 describe("ClientCapabilities", () => {
-    it("reads the AIR capabilities only from the AIR capability list", () => {
+    it("reads the AIR client and the AIR capabilities only from _meta.jetbrains.air", () => {
+        expect(AIR.airClient).toBe(true);
+        expect(ZED.airClient).toBe(false);
         expect(AIR.air).toEqual({rawInputRendering: true, planContentDelta: true, diffPatch: true});
         expect(ClientCapabilities.from({_meta: {rawInputRendering: true, planContentDelta: true}}).air)
             .toEqual({rawInputRendering: false, planContentDelta: false, diffPatch: false});
     });
 
-    it("selects the terminal channel from terminal_output_delta", () => {
-        expect(AIR.terminalOutputDelta).toBe(true);
-        expect(ZED.terminalOutputDelta).toBe(false);
-        expect(ClientCapabilities.from(null).terminalOutputDelta).toBe(false);
+    it("selects the terminal channel that the client declares", () => {
+        expect(AIR.terminalOutputKey(true)).toBe("terminal_output_delta");
+        expect(AIR.terminalOutputKey(false)).toBe("terminal_output_delta");
+        expect(ZED.terminalOutputKey(true)).toBe("terminal_output");
+        expect(ZED.terminalOutputKey(false)).toBeNull();
+        expect(ClientCapabilities.from(null).terminalOutputKey(true)).toBeNull();
     });
 });

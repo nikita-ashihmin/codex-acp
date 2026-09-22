@@ -1,7 +1,7 @@
 import type * as acp from "@agentclientprotocol/sdk";
 import type {JsonValue} from "../../app-server/serde_json/JsonValue";
 import type {McpToolCallError, McpToolCallResult, ThreadItem} from "../../app-server/v2";
-import type {ToolFacts} from "../ToolFacts";
+import type {StandardToolCallFields, ToolFacts} from "../ToolFacts";
 import {toToolStatus} from "./ToolStatus";
 
 type McpToolCallItem = ThreadItem & {type: "mcpToolCall"};
@@ -21,6 +21,7 @@ export class McpToolReporter {
             input: mcpInput(item),
             ...resultFacts(item.result, item.error),
             mcp: true,
+            standard: standardResult(item),
         };
     }
 
@@ -31,6 +32,7 @@ export class McpToolReporter {
             status: item.status === "completed" ? "completed" : "failed",
             input: mcpInput(item),
             ...resultFacts(item.result, item.error),
+            standard: standardResult(item),
         };
     }
 
@@ -38,6 +40,14 @@ export class McpToolReporter {
     static progress(itemId: string, message: string): ToolFacts {
         return {toolCallId: itemId, report: "update", mcpProgress: message};
     }
+}
+
+/** A client that is not AIR gets the whole result and the error in `rawOutput`, and no `content`. */
+function standardResult(item: McpToolCallItem): StandardToolCallFields {
+    return {
+        content: null,
+        rawOutput: item.result === null && item.error === null ? null : {result: item.result, error: item.error},
+    };
 }
 
 function mcpInput(item: McpToolCallItem): Record<string, unknown> {

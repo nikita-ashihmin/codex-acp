@@ -30,38 +30,55 @@ const MAX_COLLECTED_OUTPUT = 1024 * 1024;
 export class CommandReporter {
     /** Read, search and list commands of the live turn. */
     private readonly nonTerminalCommands = new Set<string>();
+    /** Started commands that show a terminal. */
+    private readonly terminalCommands = new Set<string>();
     /** Terminal commands that already streamed output. */
     private readonly streamedCommands = new Set<string>();
+    /** Commands that already sent output or stdin chunks to a client that is not AIR. */
+    private readonly standardStreamedCommands = new Set<string>();
     private readonly collectedOutput = new Map<string, string>();
 
     started(item: CommandItem): ToolFacts {
         if (usesTerminal(item)) {
             this.nonTerminalCommands.delete(item.id);
+            this.terminalCommands.add(item.id);
         } else {
             this.nonTerminalCommands.add(item.id);
+            this.terminalCommands.delete(item.id);
         }
         this.streamedCommands.delete(item.id);
+        this.standardStreamedCommands.delete(item.id);
         this.collectedOutput.delete(item.id);
         return startFacts(item);
     }
 
-    /** Returns `null` when the output goes to the completion instead. */
-    outputDelta(itemId: string, delta: string): ToolFacts | null {
+    /**
+     * A chunk of command output.
+     * For AIR, the output of a read, search or list command goes to the completion instead.
+     */
+    outputDelta(itemId: string, delta: string): ToolFacts {
+        if (delta.length > 0) this.standardStreamedCommands.add(itemId);
+        const standard = {commandOutput: {data: delta, terminal: this.terminalCommands.has(itemId)}};
         if (this.nonTerminalCommands.has(itemId)) {
             const collected = (this.collectedOutput.get(itemId) ?? "") + delta;
             this.collectedOutput.set(itemId, collected.length > MAX_COLLECTED_OUTPUT
                 ? collected.slice(collected.length - MAX_COLLECTED_OUTPUT)
                 : collected);
-            return null;
+            return {toolCallId: itemId, report: "update", standard};
         }
         if (delta.length > 0) this.streamedCommands.add(itemId);
-        return {toolCallId: itemId, report: "update", terminalOutput: delta};
+        return {toolCallId: itemId, report: "update", terminalOutput: delta, standard};
     }
 
-    /** Text that was written to the stdin of a running command. It is not command output. */
-    terminalInput(itemId: string, stdin: string): ToolFacts | null {
-        if (this.nonTerminalCommands.has(itemId)) return null;
-        return {toolCallId: itemId, report: "update", terminalInput: stdin};
+    /**
+     * Text that was written to the stdin of a running command. For AIR, it is not command output.
+     * A client that is not AIR gets it as an output chunk on its own line.
+     */
+    terminalInput(itemId: string, stdin: string): ToolFacts {
+        this.standardStreamedCommands.add(itemId);
+        const standard = {commandOutput: {data: `\n${stdin}\n`, terminal: this.terminalCommands.has(itemId)}};
+        if (this.nonTerminalCommands.has(itemId)) return {toolCallId: itemId, report: "update", standard};
+        return {toolCallId: itemId, report: "update", terminalInput: stdin, standard};
     }
 
     /** Pass `withName` when the completion can be the first report of the tool call. */
@@ -70,7 +87,20 @@ export class CommandReporter {
         this.collectedOutput.delete(item.id);
         this.nonTerminalCommands.delete(item.id);
         const streamed = this.streamedCommands.delete(item.id);
-        return completionFacts(item, streamed, collected, withName);
+        const facts = completionFacts(item, streamed, collected, withName);
+        return {
+            ...facts,
+            standard: {
+                content: null,
+                commandEnd: {
+                    output: item.aggregatedOutput ?? "",
+                    exitCode: item.exitCode,
+                    terminal: this.terminalCommands.delete(item.id),
+                    streamed: this.standardStreamedCommands.delete(item.id),
+                    replay: false,
+                },
+            },
+        };
     }
 
     /**
@@ -110,13 +140,35 @@ export class CommandReporter {
                 ...permissionProfilePaths(params.additionalPermissions),
             ])],
             ...(content.length > 0 ? {result: content} : {}),
+            standard: {
+                kind: "execute",
+                status: "pending",
+                title: network ? `${network.protocol} network access to ${network.host}` : permissionTitle(actions),
+                locations: [...new Set([
+                    ...actionPaths(actions),
+                    ...permissionProfilePaths(params.additionalPermissions),
+                ])],
+            },
         };
     }
 
     /** The reports of a command from the thread history. */
     static history(item: CommandItem): ToolFacts[] {
         const start = startFacts(item);
-        return item.status === "inProgress" ? [start] : [start, completionFacts(item, false, undefined, false)];
+        if (item.status === "inProgress") return [start];
+        return [start, {
+            ...completionFacts(item, false, undefined, false),
+            standard: {
+                content: null,
+                commandEnd: {
+                    output: item.aggregatedOutput ?? "",
+                    exitCode: item.exitCode,
+                    terminal: usesTerminal(item),
+                    streamed: false,
+                    replay: true,
+                },
+            },
+        }];
     }
 }
 

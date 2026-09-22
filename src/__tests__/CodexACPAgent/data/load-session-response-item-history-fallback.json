@@ -21,21 +21,7 @@
           {
             "name": "plan",
             "description": "Turn plan mode on.",
-            "input": null,
-            "_meta": {
-              "jetbrains": {
-                "air": {
-                  "version": 1,
-                  "commandAction": {
-                    "kind": "setConfigOption",
-                    "configId": "collaboration_mode",
-                    "value": "plan",
-                    "resetValue": "default",
-                    "presentation": "state"
-                  }
-                }
-              }
-            }
+            "input": null
           },
           {
             "name": "mcp",
@@ -83,17 +69,6 @@
             "description": "Set a goal to keep pursuing.",
             "input": {
               "hint": "[<objective>|clear|pause|resume]"
-            },
-            "_meta": {
-              "jetbrains": {
-                "air": {
-                  "version": 1,
-                  "commandAction": {
-                    "kind": "prefixPrompt",
-                    "presentation": "state"
-                  }
-                }
-              }
             }
           },
           {
@@ -109,25 +84,6 @@
             "input": null
           }
         ]
-      }
-    }
-  ]
-}
-{
-  "method": "sessionUpdate",
-  "args": [
-    {
-      "sessionId": "session-legacy",
-      "update": {
-        "sessionUpdate": "session_info_update",
-        "_meta": {
-          "jetbrains": {
-            "air": {
-              "version": 1,
-              "goal": null
-            }
-          }
-        }
       }
     }
   ]
@@ -187,14 +143,6 @@
         "content": {
           "type": "text",
           "text": "Inspect project files"
-        },
-        "_meta": {
-          "jetbrains": {
-            "air": {
-              "version": 1,
-              "phase": "final_answer"
-            }
-          }
         }
       }
     }
@@ -225,15 +173,9 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "call-rg",
         "status": "completed",
-        "content": [
-          {
-            "type": "content",
-            "content": {
-              "type": "text",
-              "text": "Chunk ID: search123\nWall time: 0.0000 seconds\nProcess exited with code 0\nOutput:\nsrc/service.ts:export class Service {}\n"
-            }
-          }
-        ]
+        "rawOutput": {
+          "output": "Chunk ID: search123\nWall time: 0.0000 seconds\nProcess exited with code 0\nOutput:\nsrc/service.ts:export class Service {}\n"
+        }
       }
     }
   ]
@@ -263,15 +205,9 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "call-rg-failed",
         "status": "failed",
-        "content": [
-          {
-            "type": "content",
-            "content": {
-              "type": "text",
-              "text": "Chunk ID: search456\nWall time: 0.0000 seconds\nProcess exited with code 1\nOutput:\n"
-            }
-          }
-        ]
+        "rawOutput": {
+          "output": "Chunk ID: search456\nWall time: 0.0000 seconds\nProcess exited with code 1\nOutput:\n"
+        }
       }
     }
   ]
@@ -306,15 +242,9 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "call-read",
         "status": "completed",
-        "content": [
-          {
-            "type": "content",
-            "content": {
-              "type": "text",
-              "text": "Chunk ID: read123\nWall time: 0.0000 seconds\nProcess exited with code 0\nOutput:\n     1\tconsole.log('hi');\n"
-            }
-          }
-        ]
+        "rawOutput": {
+          "output": "Chunk ID: read123\nWall time: 0.0000 seconds\nProcess exited with code 0\nOutput:\n     1\tconsole.log('hi');\n"
+        }
       }
     }
   ]
@@ -344,15 +274,9 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "call-ls",
         "status": "completed",
-        "content": [
-          {
-            "type": "content",
-            "content": {
-              "type": "text",
-              "text": "Chunk ID: abc123\nWall time: 0.0000 seconds\nProcess exited with code 0\nOutput:\nREADME.md\nsrc\n"
-            }
-          }
-        ]
+        "rawOutput": {
+          "output": "Chunk ID: abc123\nWall time: 0.0000 seconds\nProcess exited with code 0\nOutput:\nREADME.md\nsrc\n"
+        }
       }
     }
   ]

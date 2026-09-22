@@ -420,7 +420,7 @@ export function createTestSessionState(overrides?: Partial<SessionState>): Sessi
         collaborationMode: DEFAULT_COLLABORATION_MODE,
         fastModeEnabled: false,
         currentModelSupportsFast: false,
-        clientCapabilities: ClientCapabilities.DEFAULT.with({terminalOutputDelta: true}),
+        clientCapabilities: ClientCapabilities.DEFAULT.with({airClient: true, terminalOutputDelta: true}),
         goalRevision: 0,
         sessionTitle: null,
         sessionTitleSource: "unknown",

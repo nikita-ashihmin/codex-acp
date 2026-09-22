@@ -61,7 +61,8 @@ export class CodexApprovalHandler implements ApprovalHandler {
                     this.permissionContext.commandName(params.threadId, params.itemId),
                 )),
                 options: decisions.map(({option}) => option),
-                _meta: requestPermissionMeta(
+                ...requestPermissionMeta(
+                    this.renderer.capabilities.airClient,
                     params.networkApprovalContext ? CODEX_NETWORK_PERMISSION_TITLE : CODEX_COMMAND_PERMISSION_TITLE,
                     params.reason,
                 ),
@@ -83,7 +84,11 @@ export class CodexApprovalHandler implements ApprovalHandler {
                     this.permissionContext.fileChange(params.threadId, params.itemId),
                 )),
                 options: decisions.map(({option}) => option),
-                _meta: requestPermissionMeta(CODEX_FILE_CHANGE_PERMISSION_TITLE, params.reason),
+                ...requestPermissionMeta(
+                    this.renderer.capabilities.airClient,
+                    CODEX_FILE_CHANGE_PERMISSION_TITLE,
+                    params.reason,
+                ),
             });
             return {decision: this.selectedDecision(response, decisions) ?? "cancel"};
         } catch (error) {
@@ -105,7 +110,11 @@ export class CodexApprovalHandler implements ApprovalHandler {
                     params.permissions,
                 )),
                 options: permissionProfileOptions(),
-                _meta: requestPermissionMeta(CODEX_ADDITIONAL_PERMISSIONS_TITLE, params.reason),
+                ...requestPermissionMeta(
+                    this.renderer.capabilities.airClient,
+                    CODEX_ADDITIONAL_PERMISSIONS_TITLE,
+                    params.reason,
+                ),
             });
             return this.permissionsResponse(params.permissions, response);
         } catch (error) {

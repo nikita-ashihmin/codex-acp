@@ -37,8 +37,8 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "cmd",
       "_meta": {
-        "terminal_input": {
-          "data": "y",
+        "terminal_output": {
+          "data": "\ny\n",
           "terminal_id": "cmd"
         }
       }
@@ -47,6 +47,10 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "cmd",
       "status": "completed",
+      "rawOutput": {
+        "formatted_output": "ok\n",
+        "exit_code": 0
+      },
       "_meta": {
         "terminal_exit": {
           "exit_code": 0,
@@ -73,15 +77,10 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "read",
       "status": "completed",
-      "content": [
-        {
-          "type": "content",
-          "content": {
-            "type": "text",
-            "text": "ok\n"
-          }
-        }
-      ]
+      "rawOutput": {
+        "formatted_output": "ok\n",
+        "exit_code": 0
+      }
     }
   ],
   "mcp": [
@@ -115,15 +114,6 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "mcp",
       "status": "completed",
-      "content": [
-        {
-          "type": "content",
-          "content": {
-            "type": "text",
-            "text": "hit"
-          }
-        }
-      ],
       "rawInput": {
         "server": "docs",
         "tool": "search",
@@ -132,9 +122,19 @@
         }
       },
       "rawOutput": {
-        "structuredContent": {
-          "hits": 1
-        }
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hit"
+            }
+          ],
+          "structuredContent": {
+            "hits": 1
+          },
+          "_meta": null
+        },
+        "error": null
       }
     }
   ],
@@ -220,7 +220,13 @@
             "uri": "/w/square.png"
           }
         }
-      ]
+      ],
+      "rawOutput": {
+        "status": "completed",
+        "revisedPrompt": "A square",
+        "result": "AAAA",
+        "savedPath": "/w/square.png"
+      }
     }
   ],
   "collab": [
@@ -230,39 +236,21 @@
       "kind": "other",
       "title": "spawnAgent",
       "status": "completed",
-      "content": [
-        {
-          "type": "content",
-          "content": {
-            "type": "text",
-            "text": "Find the weather."
-          }
-        }
-      ],
       "rawInput": {
         "prompt": "Find the weather.",
         "senderThreadId": "root",
         "receiverThreadIds": [
           "child"
         ],
-        "model": null,
-        "reasoningEffort": null
-      },
-      "rawOutput": {
         "agentsStates": {
           "child": {
             "status": "completed",
             "message": null
           }
-        }
-      },
-      "_meta": {
-        "jetbrains": {
-          "air": {
-            "version": 1,
-            "subagent": true
-          }
-        }
+        },
+        "model": null,
+        "reasoningEffort": null,
+        "status": "completed"
       }
     }
   ],
@@ -277,14 +265,6 @@
         "agentThreadId": "child",
         "agentPath": "/root/child",
         "activityKind": "started"
-      },
-      "_meta": {
-        "jetbrains": {
-          "air": {
-            "version": 1,
-            "subagent": true
-          }
-        }
       }
     }
   ],
@@ -312,18 +292,24 @@
           "type": "content",
           "content": {
             "type": "text",
-            "text": "Action: shell ls"
-          }
-        },
-        {
-          "type": "content",
-          "content": {
-            "type": "text",
-            "text": "Status: Approved\nRisk: low\nRationale: Safe."
+            "text": "Status: Approved\nAction: shell ls\nRisk: low\nRationale: Safe."
           }
         }
       ],
       "rawInput": {
+        "threadId": "s",
+        "turnId": "t",
+        "startedAtMs": 0,
+        "completedAtMs": 1,
+        "reviewId": "r",
+        "targetItemId": null,
+        "decisionSource": "agent",
+        "review": {
+          "status": "approved",
+          "riskLevel": "low",
+          "userAuthorization": null,
+          "rationale": "Safe."
+        },
         "action": {
           "type": "command",
           "source": "shell",
@@ -339,17 +325,7 @@
       "toolCallId": "compact",
       "kind": "think",
       "title": "Compact conversation",
-      "status": "completed",
-      "_meta": {
-        "jetbrains": {
-          "air": {
-            "version": 1,
-            "contextCompaction": {
-              "version": 1
-            }
-          }
-        }
-      }
+      "status": "completed"
     }
   ],
   "elicitation": [

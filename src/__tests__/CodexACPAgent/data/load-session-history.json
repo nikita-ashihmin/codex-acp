@@ -21,21 +21,7 @@
           {
             "name": "plan",
             "description": "Turn plan mode on.",
-            "input": null,
-            "_meta": {
-              "jetbrains": {
-                "air": {
-                  "version": 1,
-                  "commandAction": {
-                    "kind": "setConfigOption",
-                    "configId": "collaboration_mode",
-                    "value": "plan",
-                    "resetValue": "default",
-                    "presentation": "state"
-                  }
-                }
-              }
-            }
+            "input": null
           },
           {
             "name": "mcp",
@@ -83,17 +69,6 @@
             "description": "Set a goal to keep pursuing.",
             "input": {
               "hint": "[<objective>|clear|pause|resume]"
-            },
-            "_meta": {
-              "jetbrains": {
-                "air": {
-                  "version": 1,
-                  "commandAction": {
-                    "kind": "prefixPrompt",
-                    "presentation": "state"
-                  }
-                }
-              }
             }
           },
           {
@@ -109,34 +84,6 @@
             "input": null
           }
         ]
-      }
-    }
-  ]
-}
-{
-  "method": "sessionUpdate",
-  "args": [
-    {
-      "sessionId": "session-1",
-      "update": {
-        "sessionUpdate": "session_info_update",
-        "_meta": {
-          "jetbrains": {
-            "air": {
-              "version": 1,
-              "goal": {
-                "objective": "Keep the restored migration green",
-                "status": "paused",
-                "tokenBudget": null,
-                "tokensUsed": 42,
-                "timeUsedSeconds": 46,
-                "createdAt": 1710000000000,
-                "updatedAt": 1710000046000,
-                "controlMethod": "_session/goal"
-              }
-            }
-          }
-        }
       }
     }
   ]
@@ -257,11 +204,11 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "item-cmd-1",
         "status": "completed",
+        "rawOutput": {
+          "formatted_output": "Added.txt\nREADME.md\n",
+          "exit_code": 0
+        },
         "_meta": {
-          "terminal_output": {
-            "data": "Added.txt\nREADME.md\n",
-            "terminal_id": "item-cmd-1"
-          },
           "terminal_exit": {
             "exit_code": 0,
             "signal": null,
@@ -413,7 +360,13 @@
               "uri": "/test/project/generated-blue-square.png"
             }
           }
-        ]
+        ],
+        "rawOutput": {
+          "status": "completed",
+          "revisedPrompt": "A tiny blue square",
+          "result": "iVBORw0KGgo=",
+          "savedPath": "/test/project/generated-blue-square.png"
+        }
       }
     }
   ]
@@ -428,17 +381,7 @@
         "toolCallId": "item-context-compaction-1",
         "kind": "think",
         "title": "Compact conversation",
-        "status": "completed",
-        "_meta": {
-          "jetbrains": {
-            "air": {
-              "version": 1,
-              "contextCompaction": {
-                "version": 1
-              }
-            }
-          }
-        }
+        "status": "completed"
       }
     }
   ]
@@ -458,14 +401,6 @@
           "agentThreadId": "thread-child-1",
           "agentPath": "/root/test_audit",
           "activityKind": "started"
-        },
-        "_meta": {
-          "jetbrains": {
-            "air": {
-              "version": 1,
-              "subagent": true
-            }
-          }
         }
       }
     }

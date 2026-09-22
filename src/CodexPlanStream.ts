@@ -12,7 +12,8 @@ export const AIR_CONTENT_DELTA_KEY = "contentDelta";
  * - With the AIR `planContentDelta` capability, the first report of a plan is a `plan_update` with the whole text.
  *   Later reports carry only the appended text in `_meta.jetbrains.air.contentDelta`.
  * - Another client with plan updates gets throttled `plan_update` snapshots.
- * - A client without plan updates gets the plan as appended `agent_message_chunk` text.
+ * - AIR without plan updates gets the plan as appended `agent_message_chunk` text.
+ * - Another client without plan updates gets the whole plan as one `agent_message_chunk` when the plan completes.
  *
  * The completed plan item is authoritative. The stream sends only what the client does not have yet.
  */
@@ -39,8 +40,10 @@ export class CodexPlanStream {
         const text = (this.streamedText.get(itemId) ?? "") + delta;
         this.streamedText.set(itemId, text);
         if (!this.capabilities.planUpdates) {
+            // A client that is not AIR gets the whole plan once, when the plan item completes.
+            if (!this.capabilities.airClient) return null;
             this.reportedText.set(itemId, text);
-            return planMessageChunk(delta, itemId);
+            return planMessageChunk(delta, itemId, true);
         }
         this.pendingItemIds.add(itemId);
         this.schedule();
@@ -91,10 +94,10 @@ export class CodexPlanStream {
     private remainingMessageText(itemId: string, text: string): UpdateSessionEvent | null {
         const reported = this.reportedText.get(itemId) ?? "";
         this.reportedText.delete(itemId);
-        if (reported.length === 0) return planMessageChunk(text, itemId);
+        if (reported.length === 0) return planMessageChunk(text, itemId, this.capabilities.airClient);
         if (text.startsWith(reported)) {
             const rest = text.slice(reported.length);
-            return rest.length > 0 ? planMessageChunk(rest, itemId) : null;
+            return rest.length > 0 ? planMessageChunk(rest, itemId, this.capabilities.airClient) : null;
         }
         // A message chunk cannot be replaced, so the streamed text stays.
         logger.log("The completed plan differs from the streamed plan text", {itemId});
@@ -143,6 +146,6 @@ export class CodexPlanStream {
     }
 }
 
-function planMessageChunk(text: string, itemId: string): UpdateSessionEvent {
-    return createAgentTextMessageChunk(text, itemId, createMessagePhaseMeta("final_answer"));
+function planMessageChunk(text: string, itemId: string, airClient: boolean): UpdateSessionEvent {
+    return createAgentTextMessageChunk(text, itemId, createMessagePhaseMeta("final_answer", airClient));
 }

@@ -6,7 +6,11 @@ import type {
     FileChangeRequestApprovalParams,
     PermissionsRequestApprovalParams,
 } from "../../app-server/v2";
-import {createCodexMockTestFixture, createTestSessionState, type CodexMockTestFixture} from "../acp-test-utils";
+import {
+    createCodexMockTestFixture,
+    createTestSessionState,
+    type CodexMockTestFixture,
+} from "../acp-test-utils";
 import type {SessionState} from "../../CodexAcpServer";
 import {AgentMode} from "../../AgentMode";
 import {ApprovalOptionId} from "../../permissions/option-ids";
@@ -20,9 +24,15 @@ describe("Approval Events", () => {
     let fixture: CodexMockTestFixture;
     const sessionId = "test-session-id";
 
-    beforeEach(() => {
+    beforeEach(async () => {
         fixture = createCodexMockTestFixture();
         vi.clearAllMocks();
+        // The permission presentation of these tests is the AIR shape.
+        await fixture.getCodexAcpAgent().initialize({
+            protocolVersion: 1,
+            clientCapabilities: {_meta: {jetbrains: {air: {version: 1, capabilities: []}}}},
+        });
+        fixture.clearAcpConnectionDump();
     });
 
     function setupSessionWithPendingPrompt() {

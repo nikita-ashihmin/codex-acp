@@ -1,5 +1,5 @@
 import type * as acp from "@agentclientprotocol/sdk";
-import {AIR_PERMISSION_KEY, withAirMeta} from "../AirExtension";
+import {AIR_PERMISSION_KEY, airOnlyMeta} from "../AirExtension";
 
 export const CODEX_COMMAND_PERMISSION_TITLE = "Run command?";
 export const CODEX_NETWORK_PERMISSION_TITLE = "Allow network access?";
@@ -17,26 +17,30 @@ type OptionPermissionMetadata = {
     description: string;
 };
 
+/** Only AIR gets the permission presentation, in `_meta.jetbrains.air.permission`. */
 export function requestPermissionMeta(
+    airClient: boolean,
     title: string,
     reason?: string | null,
-): NonNullable<acp.RequestPermissionRequest["_meta"]> {
+): Pick<acp.RequestPermissionRequest, "_meta"> {
     const description = nonBlank(reason);
     const permission: RequestPermissionMetadata = {
         version: 1,
         title,
         ...(description ? {description} : {}),
     };
-    return withAirMeta(undefined, AIR_PERMISSION_KEY, permission);
+    const meta = airOnlyMeta(airClient, AIR_PERMISSION_KEY, permission);
+    return meta ? {_meta: meta} : {};
 }
 
 export function optionPermissionMeta(
+    airClient: boolean,
     description?: string | null,
 ): acp.PermissionOption["_meta"] | undefined {
     const normalized = nonBlank(description);
     if (!normalized) return undefined;
     const permission: OptionPermissionMetadata = {version: 1, description: normalized};
-    return withAirMeta(undefined, AIR_PERMISSION_KEY, permission);
+    return airOnlyMeta(airClient, AIR_PERMISSION_KEY, permission);
 }
 
 function nonBlank(value?: string | null): string | undefined {

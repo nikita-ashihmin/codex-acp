@@ -52,6 +52,14 @@ export function withAirMeta(
 }
 
 /**
+ * The metadata of a key that exists only for AIR.
+ * AIR gets `_meta.jetbrains.air.<key>`. Every other client gets no metadata.
+ */
+export function airOnlyMeta(airClient: boolean, key: string, value: unknown): Record<string, unknown> | undefined {
+    return airClient ? withAirMeta(undefined, key, value) : undefined;
+}
+
+/**
  * Tells whether the client is AIR.
  * A client is AIR when `clientCapabilities._meta.jetbrains.air` is present.
  */

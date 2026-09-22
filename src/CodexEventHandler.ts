@@ -674,7 +674,8 @@ export class CodexEventHandler {
 
     private async createTextEvent(event: AgentMessageDeltaNotification): Promise<UpdateSessionEvent> {
         const phase = this.agentMessagePhases.get(event.itemId) ?? null;
-        return createAgentTextMessageChunk(event.delta, event.itemId, createMessagePhaseMeta(phase));
+        const meta = createMessagePhaseMeta(phase, this.sessionState.clientCapabilities.airClient);
+        return createAgentTextMessageChunk(event.delta, event.itemId, meta);
     }
 
     private async createConfigWarningEvent(event: ConfigWarningNotification): Promise<UpdateSessionEvent> {
@@ -729,7 +730,9 @@ export class CodexEventHandler {
         return this.createGoalSessionInfoUpdate(null);
     }
 
-    private createGoalSessionInfoUpdate(goal: ThreadGoalSnapshot | null): UpdateSessionEvent {
+    /** Only AIR gets the goal. The update carries nothing else, so another client gets no update. */
+    private createGoalSessionInfoUpdate(goal: ThreadGoalSnapshot | null): UpdateSessionEvent | null {
+        if (!this.sessionState.clientCapabilities.airClient) return null;
         return {
             sessionUpdate: "session_info_update",
             _meta: withAirMeta(undefined, AIR_GOAL_KEY, goal),

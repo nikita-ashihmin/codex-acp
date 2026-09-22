@@ -2,7 +2,7 @@ import type * as acp from "@agentclientprotocol/sdk";
 import type {UpdateSessionEvent} from "../ACPSessionConnection";
 import {AIR_CONTEXT_COMPACTION_KEY, withAirMeta} from "../AirExtension";
 import type {ClientCapabilities} from "./ClientCapabilities";
-import type {PermissionToolFacts, ToolFacts} from "./ToolFacts";
+import type {CommandEnd, PermissionToolFacts, StandardToolCallFields, ToolFacts} from "./ToolFacts";
 
 export const AIR_SUBAGENT_KEY = "subagent";
 
@@ -19,20 +19,31 @@ export class AcpToolCallRenderer {
     constructor(readonly capabilities: ClientCapabilities) {}
 
     render(facts: ToolFacts): ToolCallReport {
-        // A `tool_call` requires a title.
-        const title = facts.report === "start" ? facts.title ?? "" : facts.title;
-        const fields = {
+        const rendered: Record<string, unknown> = {
             toolCallId: facts.toolCallId,
             ...(facts.name === undefined ? {} : {name: facts.name}),
             ...(facts.kind === undefined ? {} : {kind: facts.kind}),
-            ...(title === undefined ? {} : {title}),
+            ...(facts.title === undefined ? {} : {title: facts.title}),
             ...(facts.status === undefined ? {} : {status: facts.status}),
             ...this.contentField(facts),
             ...locationsField(facts.locations),
             ...(facts.input === undefined ? {} : {rawInput: facts.input}),
             ...(facts.opaqueResult === undefined ? {} : {rawOutput: facts.opaqueResult}),
-            ...this.metaField(facts),
         };
+        const meta = this.capabilities.airClient ? this.airMeta(facts) : this.standardMeta(facts);
+        if (!this.capabilities.airClient) {
+            applyStandardFields(rendered, facts.standard);
+            if (facts.standard?.commandEnd !== undefined) {
+                const rawOutput = this.commandEndRawOutput(facts.standard.commandEnd);
+                if (rawOutput !== undefined) rendered["rawOutput"] = rawOutput;
+            }
+        }
+        // A `tool_call` requires a title.
+        if (facts.report === "start" && rendered["title"] === undefined) rendered["title"] = "";
+        const fields = {
+            ...rendered,
+            ...(Object.keys(meta).length > 0 ? {_meta: meta} : {}),
+        } as Omit<ToolCallReport, "sessionUpdate">;
         if (facts.report === "start") {
             return {sessionUpdate: "tool_call", ...fields} as ToolCallReport;
         }
@@ -40,7 +51,7 @@ export class AcpToolCallRenderer {
     }
 
     renderPermissionToolCall(facts: PermissionToolFacts): acp.ToolCallUpdate {
-        return {
+        const rendered: Record<string, unknown> = {
             toolCallId: facts.toolCallId,
             ...(facts.name === undefined ? {} : {name: facts.name}),
             ...(facts.kind === undefined ? {} : {kind: facts.kind}),
@@ -50,6 +61,8 @@ export class AcpToolCallRenderer {
             ...locationsField(facts.locations),
             ...this.contentField(facts),
         };
+        if (!this.capabilities.airClient) applyStandardFields(rendered, facts.standard);
+        return rendered as acp.ToolCallUpdate;
     }
 
     private contentField(facts: PermissionToolFacts & {terminal?: unknown}): {content?: acp.ToolCallContent[]} {
@@ -68,28 +81,100 @@ export class AcpToolCallRenderer {
         };
     }
 
-    private metaField(facts: ToolFacts): {_meta?: Record<string, unknown>} {
+    private airMeta(facts: ToolFacts): Record<string, unknown> {
         const terminalId = facts.toolCallId;
         let meta: Record<string, unknown> = {
-            ...(facts.terminal === undefined ? {} : {terminal_info: {cwd: facts.terminal.cwd, terminal_id: terminalId}}),
+            ...terminalInfo(facts),
             ...(facts.terminalInput === undefined ? {} : {terminal_input: {data: facts.terminalInput, terminal_id: terminalId}}),
-            ...(facts.terminalOutput === undefined ? {} : {
-                [this.capabilities.terminalOutputDelta ? "terminal_output_delta" : "terminal_output"]: {
-                    data: facts.terminalOutput,
-                    terminal_id: terminalId,
-                },
-            }),
-            ...(facts.terminalExit === undefined ? {} : {
-                terminal_exit: {exit_code: facts.terminalExit.exitCode, signal: null, terminal_id: terminalId},
-            }),
-            ...(facts.mcpProgress === undefined ? {} : {mcp_output_delta: {data: facts.mcpProgress}}),
-            ...(facts.mcp ? {is_mcp_tool_call: true} : {}),
+            ...(facts.terminalOutput === undefined ? {} : this.outputChunk(terminalId, facts.terminalOutput, true)),
+            ...(facts.terminalExit === undefined ? {} : terminalExit(terminalId, facts.terminalExit.exitCode)),
+            ...mcpMeta(facts),
         };
         if (facts.subagent) meta = withAirMeta(meta, AIR_SUBAGENT_KEY, true);
         if (facts.contextCompaction !== undefined) {
             meta = withAirMeta(meta, AIR_CONTEXT_COMPACTION_KEY, facts.contextCompaction);
         }
-        return Object.keys(meta).length > 0 ? {_meta: meta} : {};
+        return meta;
+    }
+
+    /**
+     * The metadata of a client that is not AIR. It has no AIR keys.
+     * The command output comes from `facts.standard`.
+     */
+    private standardMeta(facts: ToolFacts): Record<string, unknown> {
+        const terminalId = facts.toolCallId;
+        const output = facts.standard?.commandOutput;
+        const end = facts.standard?.commandEnd;
+        return {
+            ...terminalInfo(facts),
+            ...(output === undefined ? {} : this.outputChunk(terminalId, output.data, output.terminal)),
+            ...(end === undefined ? {} : this.commandEndMeta(terminalId, end)),
+            ...mcpMeta(facts),
+        };
+    }
+
+    private outputChunk(terminalId: string, data: string, terminal: boolean): Record<string, unknown> {
+        const key = this.capabilities.terminalOutputKey(terminal);
+        return key === null ? {} : {[key]: {data, terminal_id: terminalId}};
+    }
+
+    private commandEndRawOutput(end: CommandEnd): unknown {
+        return end.replay || !this.capabilities.terminalOutputDelta
+            ? {formatted_output: end.output, exit_code: end.exitCode}
+            : undefined;
+    }
+
+    /**
+     * The end of a command for a client that is not AIR.
+     * The output that did not stream goes to the output channel, when the client has one for this command.
+     * A replayed command without a terminal has only `rawOutput`.
+     */
+    private commandEndMeta(terminalId: string, end: CommandEnd): Record<string, unknown> {
+        const sendOutput = end.output.length > 0 && !end.streamed && (end.terminal || !end.replay);
+        return {
+            ...(sendOutput ? this.outputChunk(terminalId, end.output, end.terminal) : {}),
+            ...(end.terminal ? terminalExit(terminalId, end.exitCode) : {}),
+        };
+    }
+}
+
+function terminalInfo(facts: ToolFacts): Record<string, unknown> {
+    return facts.terminal === undefined ? {} : {terminal_info: {cwd: facts.terminal.cwd, terminal_id: facts.toolCallId}};
+}
+
+function terminalExit(terminalId: string, exitCode: number | null): Record<string, unknown> {
+    return {terminal_exit: {exit_code: exitCode, signal: null, terminal_id: terminalId}};
+}
+
+function mcpMeta(facts: ToolFacts): Record<string, unknown> {
+    return {
+        ...(facts.mcpProgress === undefined ? {} : {mcp_output_delta: {data: facts.mcpProgress}}),
+        ...(facts.mcp ? {is_mcp_tool_call: true} : {}),
+    };
+}
+
+/** Applies the fields of a client that is not AIR. `null` removes a field. */
+function applyStandardFields(
+    rendered: Record<string, unknown>,
+    standard: Omit<StandardToolCallFields, "commandOutput" | "commandEnd"> | undefined,
+): void {
+    if (standard === undefined) return;
+    const locations = standard.locations === undefined || standard.locations === null
+        ? standard.locations
+        : locationsField(standard.locations).locations ?? null;
+    const fields: Array<[string, unknown]> = [
+        ["title", standard.title],
+        ["kind", standard.kind],
+        ["status", standard.status],
+        ["locations", locations],
+        ["content", standard.content],
+        ["rawInput", standard.rawInput],
+        ["rawOutput", standard.rawOutput],
+    ];
+    for (const [name, value] of fields) {
+        if (value === undefined) continue;
+        if (value === null) delete rendered[name];
+        else rendered[name] = value;
     }
 }
 

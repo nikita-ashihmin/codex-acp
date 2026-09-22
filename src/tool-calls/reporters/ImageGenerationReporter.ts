@@ -1,7 +1,7 @@
 import type * as acp from "@agentclientprotocol/sdk";
 import type {ThreadItem} from "../../app-server/v2";
 import {textContent} from "../AcpToolCallRenderer";
-import type {ToolFacts} from "../ToolFacts";
+import type {StandardToolCallFields, ToolFacts} from "../ToolFacts";
 
 type ImageGenerationItem = ThreadItem & {type: "imageGeneration"};
 
@@ -13,7 +13,14 @@ const TITLE = "Image generation";
  */
 export class ImageGenerationReporter {
     static started(item: ImageGenerationItem): ToolFacts {
-        return {toolCallId: item.id, report: "start", kind: "other", title: TITLE, status: "in_progress"};
+        return {
+            toolCallId: item.id,
+            report: "start",
+            kind: "other",
+            title: TITLE,
+            status: "in_progress",
+            standard: {rawInput: {id: item.id}},
+        };
     }
 
     static completed(item: ImageGenerationItem): ToolFacts {
@@ -22,6 +29,7 @@ export class ImageGenerationReporter {
             report: "update",
             status: terminalStatus(item.status),
             result: imageResult(item),
+            standard: standardResult(item),
         };
     }
 
@@ -34,8 +42,26 @@ export class ImageGenerationReporter {
             title: TITLE,
             status: options?.terminalStatus ? terminalStatus(item.status) : toolStatus(item.status),
             result: imageResult(item),
+            standard: standardResult(item),
         };
     }
+}
+
+/**
+ * A client that is not AIR gets the image only when Codex sent its data, and the item fields in `rawOutput`.
+ */
+function standardResult(item: ImageGenerationItem): StandardToolCallFields {
+    const rawOutput: Record<string, string | null> = {
+        status: item.status,
+        revisedPrompt: item.revisedPrompt,
+        result: item.result,
+    };
+    if ("savedPath" in item) rawOutput["savedPath"] = item.savedPath ?? null;
+    return {
+        content: imageResult(item)
+            .filter(content => content.type !== "content" || content.content.type !== "resource_link"),
+        rawOutput,
+    };
 }
 
 function imageResult(item: ImageGenerationItem): acp.ToolCallContent[] {

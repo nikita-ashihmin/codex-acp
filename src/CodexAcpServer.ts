@@ -351,6 +351,11 @@ export class CodexAcpServer {
         this.booleanConfigOptionsSupported = clientSupportsBooleanConfigOptions(_params.clientCapabilities);
         await this.runWithProcessCheck(() => this.codexAcpClient.initialize(_params));
         this.publishFirstAuthStatusAfterResponse();
+        const goalCapability = {
+            version: GOAL_EXTENSION_VERSION,
+            controlMethod: GOAL_CONTROL_METHOD,
+            actions: [...GOAL_CONTROL_ACTIONS],
+        };
         const sessionCapabilities: SubagentAwareSessionCapabilities = {
             resume: { },
             list: { },
@@ -394,26 +399,25 @@ export class CodexAcpServer {
                 steering: {
                     supported: true,
                 },
-                [JETBRAINS_META_KEY]: {
-                    [AIR_META_KEY]: {
-                        [AIR_EXTENSION_VERSION_KEY]: AIR_EXTENSION_VERSION,
-                        [AIR_GOAL_KEY]: {
-                            version: GOAL_EXTENSION_VERSION,
-                            controlMethod: GOAL_CONTROL_METHOD,
-                            actions: [...GOAL_CONTROL_ACTIONS],
+                // Only AIR gets the AIR extension, see `docs/air-extensions.md`.
+                ...(this.capabilities.airClient ? {
+                    [JETBRAINS_META_KEY]: {
+                        [AIR_META_KEY]: {
+                            [AIR_EXTENSION_VERSION_KEY]: AIR_EXTENSION_VERSION,
+                            [AIR_GOAL_KEY]: goalCapability,
+                            [AIR_EXTENSION_CAPABILITIES_KEY]: [
+                                AIR_SESSION_FAILURE_KEY,
+                                AIR_DIFF_PATCH_KEY,
+                                AIR_AGENT_FILE_CHANGE_REPORT_KEY,
+                                AIR_NATIVE_SUBAGENT_SESSIONS_KEY,
+                                AIR_ASYNC_TASKS_KEY,
+                                AIR_RECOMMENDED_CONFIG_VALUE_KEY,
+                                AIR_RAW_INPUT_RENDERING_KEY,
+                                AIR_PLAN_CONTENT_DELTA_KEY,
+                            ],
                         },
-                        [AIR_EXTENSION_CAPABILITIES_KEY]: [
-                            AIR_SESSION_FAILURE_KEY,
-                            AIR_DIFF_PATCH_KEY,
-                            AIR_AGENT_FILE_CHANGE_REPORT_KEY,
-                            AIR_NATIVE_SUBAGENT_SESSIONS_KEY,
-                            AIR_ASYNC_TASKS_KEY,
-                            AIR_RECOMMENDED_CONFIG_VALUE_KEY,
-                            AIR_RAW_INPUT_RENDERING_KEY,
-                            AIR_PLAN_CONTENT_DELTA_KEY,
-                        ],
                     },
-                },
+                } : {}),
             },
         };
     }
@@ -737,7 +741,8 @@ export class CodexAcpServer {
             this.publishAsyncTasksAsync(sessionState, sessionGeneration);
         }
         const sessionModelState: LegacySessionModelState = this.createModelState(models, currentModelId);
-        const sessionModeState: SessionModeState = sessionState.agentMode.toSessionModeState();
+        const sessionModeState: SessionModeState =
+            sessionState.agentMode.toSessionModeState(sessionState.clientCapabilities.airClient);
 
         return [sessionId, sessionModelState, sessionModeState];
     }
@@ -1753,7 +1758,7 @@ export class CodexAcpServer {
             ? sessionState.availableModels.find(model => model.isDefault)?.id
             : undefined;
         const configOptions = [
-            sessionState.agentMode.toConfigOption(),
+            sessionState.agentMode.toConfigOption(sessionState.clientCapabilities.airClient),
             createCollaborationModeConfigOption(sessionState.collaborationMode),
             createModelConfigOption(sessionState.availableModels, currentModelId.model, recommendedModelId),
         ];
@@ -1857,6 +1862,8 @@ export class CodexAcpServer {
             return;
         }
         sessionState.currentGoal = snapshot;
+        // Only AIR gets the goal. The update carries nothing else, so another client gets no update.
+        if (!sessionState.clientCapabilities.airClient) return;
         const session = new ACPSessionConnection(this.connection, sessionState.sessionId);
         await session.update({
             sessionUpdate: "session_info_update",
@@ -1988,7 +1995,8 @@ export class CodexAcpServer {
         await this.publishAvailableCommands(sessionState, requestedSessionGeneration);
         await this.publishCurrentGoalBestEffort(sessionState, requestedSessionGeneration, true);
         const sessionModelState: LegacySessionModelState = this.createModelState(models, currentModelId);
-        const sessionModeState: SessionModeState = sessionState.agentMode.toSessionModeState();
+        const sessionModeState: SessionModeState =
+            sessionState.agentMode.toSessionModeState(sessionState.clientCapabilities.airClient);
 
         return {
             sessionId: sessionId,
@@ -2257,7 +2265,7 @@ export class CodexAcpServer {
             case "subAgentActivity":
                 return [renderer.render(SubagentActivityReporter.activity(item, "completed", "start"))];
             case "agentMessage": {
-                const meta = createMessagePhaseMeta(item.phase);
+                const meta = createMessagePhaseMeta(item.phase, sessionState.clientCapabilities.airClient);
                 return [{
                     sessionUpdate: "agent_message_chunk",
                     messageId: item.id,
@@ -2343,7 +2351,7 @@ export class CodexAcpServer {
         return createAgentTextMessageChunk(
             item.text,
             item.id,
-            createMessagePhaseMeta("final_answer"),
+            createMessagePhaseMeta("final_answer", this.capabilities.airClient),
         );
     }
 

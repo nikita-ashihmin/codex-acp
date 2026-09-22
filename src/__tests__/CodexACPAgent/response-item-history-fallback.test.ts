@@ -97,7 +97,7 @@ describe("ResponseItemHistoryFallback", () => {
     });
 
     it("preserves assistant message phase metadata from response items", () => {
-        const updates = parseResponseItemHistoryFallback(jsonl([
+        const history = jsonl([
             {
                 type: "response_item",
                 payload: {
@@ -109,11 +109,14 @@ describe("ResponseItemHistoryFallback", () => {
             },
             functionCall("call-missing", "ls"),
             functionCallOutput("call-missing", "Chunk ID: missing\nProcess exited with code 0\nOutput:\nREADME.md\n"),
-        ]), ClientCapabilities.DEFAULT);
+        ]);
+        const airUpdates = parseResponseItemHistoryFallback(history, ClientCapabilities.DEFAULT.with({ airClient: true }));
+        const otherUpdates = parseResponseItemHistoryFallback(history, ClientCapabilities.DEFAULT);
 
-        expect(agentMessageMetas(updates)).toEqual([
+        expect(agentMessageMetas(airUpdates)).toEqual([
             { jetbrains: { air: { version: 1, phase: "final_answer" } } },
         ]);
+        expect(agentMessageMetas(otherUpdates)).toEqual([undefined]);
     });
 
     it("marks exec command outputs without exit footers failed when they report command errors", () => {

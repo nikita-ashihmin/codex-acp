@@ -38,7 +38,17 @@ export function isMcpToolCallApproval(meta: unknown): boolean {
 export function buildMcpPermissionOptions(
     isToolApproval: boolean,
     persistOptions: Set<PersistValue>,
+    airClient: boolean,
 ): acp.PermissionOption[] {
+    const permissionOption = (
+        optionId: string,
+        name: string,
+        kind: acp.PermissionOptionKind,
+        description: string,
+    ): acp.PermissionOption => {
+        const meta = optionPermissionMeta(airClient, description);
+        return {optionId, name, kind, ...(meta ? {_meta: meta} : {})};
+    };
     const options: acp.PermissionOption[] = [permissionOption(
         isToolApproval ? McpApprovalOptionId.AllowOnce : "accept",
         "Allow",
@@ -108,7 +118,11 @@ export function buildMcpPermissionRequest(
             sessionId,
             toolCall,
             ...toolApprovalMeta,
-            options: buildMcpPermissionOptions(context.isToolApproval, context.persistOptions),
+            options: buildMcpPermissionOptions(
+                context.isToolApproval,
+                context.persistOptions,
+                renderer.capabilities.airClient,
+            ),
         },
         correlatedCallId,
     };
@@ -145,16 +159,6 @@ export function convertMcpPermissionResponse(
         default:
             return cancelledResponse();
     }
-}
-
-function permissionOption(
-    optionId: string,
-    name: string,
-    kind: acp.PermissionOptionKind,
-    description: string,
-): acp.PermissionOption {
-    const meta = optionPermissionMeta(description);
-    return {optionId, name, kind, ...(meta ? {_meta: meta} : {})};
 }
 
 function cancelledResponse(): McpServerElicitationRequestResponse {

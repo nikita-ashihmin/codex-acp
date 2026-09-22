@@ -1,8 +1,11 @@
 import type * as acp from "@agentclientprotocol/sdk";
-import {AIR_DIFF_PATCH_KEY, clientSupportsAirCapability} from "../AirExtension";
+import {AIR_DIFF_PATCH_KEY, clientSupportsAirCapability, isAirClient} from "../AirExtension";
 
 export const AIR_RAW_INPUT_RENDERING_KEY = "rawInputRendering";
 export const AIR_PLAN_CONTENT_DELTA_KEY = "planContentDelta";
+
+/** The `_meta` key of a command output chunk. */
+export type TerminalOutputKey = "terminal_output" | "terminal_output_delta";
 
 /** The AIR capabilities that change the tool call and plan reports. */
 export type AirCapabilities = {
@@ -14,46 +17,81 @@ export type AirCapabilities = {
     readonly diffPatch: boolean;
 };
 
+type ClientCapabilityValues = {
+    readonly airClient: boolean;
+    readonly terminalOutput: boolean;
+    readonly terminalOutputDelta: boolean;
+    readonly planUpdates: boolean;
+    readonly air: AirCapabilities;
+};
+
 /**
  * The client capabilities that decide how the adapter reports tool calls and plans.
  * The adapter reads them once in `initialize`. See `docs/air-extensions.md#tool-call-contract`.
+ *
+ * Only AIR gets the reports of the tool call contract.
+ * Every other client gets the reports of the adapter before the contract, see `StandardToolCallFields`.
  */
 export class ClientCapabilities {
-    static readonly DEFAULT = new ClientCapabilities(false, false, {
-        rawInputRendering: false,
-        planContentDelta: false,
-        diffPatch: false,
+    static readonly DEFAULT = new ClientCapabilities({
+        airClient: false,
+        terminalOutput: false,
+        terminalOutputDelta: false,
+        planUpdates: false,
+        air: {rawInputRendering: false, planContentDelta: false, diffPatch: false},
     });
 
-    constructor(
-        /** The client appends `_meta.terminal_output_delta`. Other clients get `_meta.terminal_output` chunks. */
-        readonly terminalOutputDelta: boolean,
-        /** The client shows `plan_update`. Other clients get the plan as agent message text. */
-        readonly planUpdates: boolean,
-        readonly air: AirCapabilities,
-    ) {}
+    /** The client declares `_meta.jetbrains.air`. */
+    readonly airClient: boolean;
+    /** The client declares `_meta.terminal_output`, the Zed convention for command output chunks. */
+    readonly terminalOutput: boolean;
+    /** The client declares `_meta.terminal_output_delta` and appends the output chunks. */
+    readonly terminalOutputDelta: boolean;
+    /** The client shows `plan_update`. Other clients get the plan as agent message text. */
+    readonly planUpdates: boolean;
+    readonly air: AirCapabilities;
+
+    private constructor(values: ClientCapabilityValues) {
+        this.airClient = values.airClient;
+        this.terminalOutput = values.terminalOutput;
+        this.terminalOutputDelta = values.terminalOutputDelta;
+        this.planUpdates = values.planUpdates;
+        this.air = values.air;
+    }
 
     static from(capabilities: acp.ClientCapabilities | null | undefined): ClientCapabilities {
-        return new ClientCapabilities(
-            capabilities?._meta?.["terminal_output_delta"] === true,
-            capabilities?.plan != null,
-            {
+        return new ClientCapabilities({
+            airClient: isAirClient(capabilities),
+            terminalOutput: capabilities?._meta?.["terminal_output"] === true,
+            terminalOutputDelta: capabilities?._meta?.["terminal_output_delta"] === true,
+            planUpdates: capabilities?.plan != null,
+            air: {
                 rawInputRendering: clientSupportsAirCapability(capabilities, AIR_RAW_INPUT_RENDERING_KEY),
                 planContentDelta: clientSupportsAirCapability(capabilities, AIR_PLAN_CONTENT_DELTA_KEY),
                 diffPatch: clientSupportsAirCapability(capabilities, AIR_DIFF_PATCH_KEY),
             },
-        );
+        });
     }
 
-    with(changes: {
-        terminalOutputDelta?: boolean;
-        planUpdates?: boolean;
-        air?: Partial<AirCapabilities>;
-    }): ClientCapabilities {
-        return new ClientCapabilities(
-            changes.terminalOutputDelta ?? this.terminalOutputDelta,
-            changes.planUpdates ?? this.planUpdates,
-            {...this.air, ...changes.air},
-        );
+    /**
+     * The key of the output chunks of a command, or `null` when the client declares no channel for them.
+     * A client that declares `terminal_output_delta` gets appends for every command.
+     * Otherwise a client that declares `terminal_output` (Zed) gets chunks for a command that shows a terminal.
+     * A client without either gets the output only when the command ends.
+     */
+    terminalOutputKey(terminal: boolean): TerminalOutputKey | null {
+        if (this.terminalOutputDelta) return "terminal_output_delta";
+        return this.terminalOutput && terminal ? "terminal_output" : null;
+    }
+
+    with(changes: Partial<Omit<ClientCapabilityValues, "air">> & {air?: Partial<AirCapabilities>}): ClientCapabilities {
+        return new ClientCapabilities({
+            airClient: changes.airClient ?? this.airClient,
+            terminalOutput: changes.terminalOutput ?? this.terminalOutput,
+            terminalOutputDelta: changes.terminalOutputDelta ?? this.terminalOutputDelta,
+            planUpdates: changes.planUpdates ?? this.planUpdates,
+            air: {...this.air, ...changes.air},
+        });
     }
 }
+

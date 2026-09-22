@@ -107,7 +107,7 @@ export function parseResponseItemHistoryFallback(
 
         switch (item["type"]) {
             case "message":
-                pushUpdates(createMessageUpdates(item));
+                pushUpdates(createMessageUpdates(item, capabilities.airClient));
                 break;
             case "reasoning":
                 pushUpdates(createReasoningUpdates(item));
@@ -229,7 +229,7 @@ function isLegacyResponseItemType(type: string): boolean {
     }
 }
 
-function createMessageUpdates(item: JsonRecord): UpdateSessionEvent[] {
+function createMessageUpdates(item: JsonRecord, airClient: boolean): UpdateSessionEvent[] {
     const role = item["role"];
     if (role === "user") {
         // User response items can include bootstrap context; user_message events are the visible source.
@@ -241,7 +241,7 @@ function createMessageUpdates(item: JsonRecord): UpdateSessionEvent[] {
 
     const phase = stringValue(item["phase"]);
     return contentBlocksFromResponseContent(item["content"]).map((content) => (
-        createAgentMessageChunk(content, undefined, createMessagePhaseMeta(phase))
+        createAgentMessageChunk(content, undefined, createMessagePhaseMeta(phase, airClient))
     ));
 }
 
@@ -422,11 +422,15 @@ function createFunctionCallOutputFacts(
             ...facts,
             ...(output.length > 0 ? { terminalOutput: output } : {}),
             terminalExit: { exitCode },
+            standard: { commandEnd: { output, exitCode, terminal: true, streamed: false, replay: true } },
         };
     }
-    // A read, search or list command shows its output as the result.
+    // For AIR, a read, search or list command shows its output as the result.
     if (execToolCallIds.has(toolCallId)) {
-        return output.length > 0 ? { ...facts, result: [{ type: "content", content: { type: "text", text: output } }] } : facts;
+        const standard = { content: null, rawOutput: { output: item["output"] } };
+        return output.length > 0
+            ? { ...facts, result: [{ type: "content", content: { type: "text", text: output } }], standard }
+            : { ...facts, standard };
     }
     return { ...facts, opaqueResult: { output: item["output"] } };
 }

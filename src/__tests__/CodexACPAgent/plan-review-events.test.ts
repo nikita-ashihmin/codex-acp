@@ -66,14 +66,14 @@ describe("CodexACPAgent - plan review", () => {
             permissionResponse?: acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse>;
         } = {},
     ) {
+        // The plan review of these tests is the AIR shape.
+        const clientCapabilities: acp.ClientCapabilities = {
+            plan: {},
+            _meta: {jetbrains: {air: {version: 1, capabilities: options.typedFailures ? ["sessionFailure"] : []}}},
+        };
         await fixture.getCodexAcpAgent().initialize({
             protocolVersion: acp.PROTOCOL_VERSION,
-            clientCapabilities: {
-                plan: {},
-                ...(options.typedFailures
-                    ? {_meta: {jetbrains: {air: {version: 1, capabilities: ["sessionFailure"]}}}}
-                    : {}),
-            },
+            clientCapabilities,
         });
         fixture.setPermissionResponse(options.permissionResponse ?? (permissionOptionId === null
             ? {outcome: {outcome: "cancelled"}}
@@ -82,7 +82,7 @@ describe("CodexACPAgent - plan review", () => {
         const sessionState = createTestSessionState({
             sessionId,
             collaborationMode: PLAN_COLLABORATION_MODE,
-            clientCapabilities: ClientCapabilities.from({plan: {}}),
+            clientCapabilities: ClientCapabilities.from(clientCapabilities),
         });
         vi.spyOn(fixture.getCodexAcpAgent(), "getSessionState").mockReturnValue(sessionState);
 
