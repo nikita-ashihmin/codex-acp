@@ -55,6 +55,11 @@ export class ToolCallReports {
         }
     }
 
+    /** Forgets the open record of one tool call. The next update of the tool call carries every field again. */
+    forgetOpen(sessionId: string, toolCallId: string): void {
+        this.openToolCalls.delete(`${sessionId}\u0000${toolCallId}`);
+    }
+
     private recordStart(key: string, update: ToolCallReport): ToolCallReport {
         this.finishedToolCalls.delete(key);
         const fields = new Map<string, string>();

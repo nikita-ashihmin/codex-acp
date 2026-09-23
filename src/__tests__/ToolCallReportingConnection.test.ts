@@ -43,7 +43,8 @@ describe("ToolCallReportingConnection", () => {
     });
 
     it("counts the permission request tool call as a report", async () => {
-        const {client, notify} = createClient();
+        const {client, notify, request} = createClient();
+        request.mockResolvedValue({outcome: {outcome: "selected", optionId: "allow"}});
         const connection = new ToolCallReportingConnection(client).asClientConnection();
         await connection.notify(acp.methods.client.session.update, {
             sessionId: "s",
@@ -64,4 +65,30 @@ describe("ToolCallReportingConnection", () => {
             update: {sessionUpdate: "tool_call_update", toolCallId: "t", status: "in_progress"},
         });
     });
+
+    for (const [name, answer] of [
+        ["cancelled", (request: ReturnType<typeof vi.fn>) => request.mockResolvedValue({outcome: {outcome: "cancelled"}})],
+        ["failed", (request: ReturnType<typeof vi.fn>) => request.mockRejectedValue(new Error("closed"))],
+    ] as const) {
+        it(`sends the fields of a ${name} permission request again in the next update`, async () => {
+            const {client, notify, request} = createClient();
+            answer(request);
+            const connection = new ToolCallReportingConnection(client).asClientConnection();
+            await connection.request(acp.methods.client.session.requestPermission, {
+                sessionId: "s",
+                toolCall: {toolCallId: "t", title: "Run command", status: "pending", rawInput: {command: "npm test"}},
+                options: [],
+            }).catch(() => undefined);
+            const update = {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "t",
+                title: "Run command",
+                status: "failed",
+                rawInput: {command: "npm test"},
+            } as const;
+            await connection.notify(acp.methods.client.session.update, {sessionId: "s", update});
+
+            expect(notify.mock.calls[0]![1]).toEqual({sessionId: "s", update});
+        });
+    }
 });

@@ -31,13 +31,28 @@ export class ToolCallReportingConnection {
         await this.client.notify(method, params);
     }
 
-    request(method: string, params?: unknown, options?: acp.SendRequestOptions): Promise<unknown> {
-        if (method === acp.methods.client.session.requestPermission && isPermissionRequestParams(params)) {
-            // The client merges the request tool call into the stored tool call, like an update.
-            this.reports.prepare(params.sessionId, {sessionUpdate: "tool_call_update", ...params.toolCall});
+    async request(method: string, params?: unknown, options?: acp.SendRequestOptions): Promise<unknown> {
+        if (method !== acp.methods.client.session.requestPermission || !isPermissionRequestParams(params)) {
+            return await this.client.request(method, params, options);
         }
-        return this.client.request(method, params, options);
+        // The client merges the request tool call into the stored tool call, like an update.
+        // A cancelled or failed request may leave the client without these fields,
+        // so the adapter then forgets the open record and sends every field again.
+        this.reports.prepare(params.sessionId, {sessionUpdate: "tool_call_update", ...params.toolCall});
+        let response: unknown;
+        try {
+            response = await this.client.request(method, params, options);
+        } catch (error) {
+            this.reports.forgetOpen(params.sessionId, params.toolCall.toolCallId);
+            throw error;
+        }
+        if (isCancelled(response)) this.reports.forgetOpen(params.sessionId, params.toolCall.toolCallId);
+        return response;
     }
+}
+
+function isCancelled(response: unknown): boolean {
+    return (response as Partial<acp.RequestPermissionResponse> | null)?.outcome?.outcome === "cancelled";
 }
 
 function isPermissionRequestParams(value: unknown): value is acp.RequestPermissionRequest {

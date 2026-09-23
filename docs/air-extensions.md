@@ -53,6 +53,7 @@ Only these differences are allowed:
 
 - A `tool_call_update` omits a field or a `_meta` key that did not change since the last report of the same tool call.
   The permission request of a tool call counts as a report. ACP clients merge an update into the stored tool call.
+  After a cancelled or failed permission request, the next update carries every field again.
 - Bug fixes: a unique MCP startup tool call id, the result of a dynamic tool in `content`,
   and no output after a tool call ended.
 - The client gets no AIR-only key.
