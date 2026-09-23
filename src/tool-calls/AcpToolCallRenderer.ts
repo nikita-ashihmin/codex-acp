@@ -26,7 +26,7 @@ export class AcpToolCallRenderer {
             ...(facts.title === undefined ? {} : {title: facts.title}),
             ...(facts.status === undefined ? {} : {status: facts.status}),
             ...this.contentField(facts),
-            ...locationsField(facts.locations),
+            ...(facts.locations === undefined ? {} : {locations: facts.locations.map(path => ({path}))}),
             ...(facts.input === undefined ? {} : {rawInput: facts.input}),
             ...(facts.opaqueResult === undefined ? {} : {rawOutput: facts.opaqueResult}),
         };
@@ -180,6 +180,7 @@ export function textContent(text: string): acp.ToolCallContent {
     return {type: "content", content: {type: "text", text}};
 }
 
+/** The locations of a permission request. An empty list sends nothing, because the request adds only new facts. */
 function locationsField(paths: string[] | undefined): {locations?: acp.ToolCallLocation[]} {
     return paths === undefined || paths.length === 0 ? {} : {locations: paths.map(path => ({path}))};
 }

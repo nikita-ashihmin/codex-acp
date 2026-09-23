@@ -16,7 +16,10 @@ export type ToolFacts = {
     kind?: acp.ToolKind;
     title?: string;
     status?: acp.ToolCallStatus;
-    /** Paths of the files that the tool reads, searches or edits. */
+    /**
+     * Paths of the files that the tool reads, searches or edits.
+     * In a report, an empty list clears the locations. A permission request omits an empty list.
+     */
     locations?: string[];
     /** The tool parameters. */
     input?: Record<string, unknown>;

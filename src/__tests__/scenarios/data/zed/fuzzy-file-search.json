@@ -210,6 +210,19 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "fuzzyFileSearch.search-1",
+        "title": "Search for 'handlr'",
+        "locations": []
+      }
+    }
+  },
+  {
+    "direction": "notify",
+    "method": "session/update",
+    "params": {
+      "sessionId": "session-1",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "fuzzyFileSearch.search-1",
         "status": "completed"
       }
     }

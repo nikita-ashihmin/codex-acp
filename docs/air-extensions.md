@@ -290,7 +290,7 @@ The other clients get the same fields as before the AIR extensions.
 | `contextCompaction` | `compaction_update` when the client declares `session.compaction`. Otherwise a synthetic tool call with `_meta.jetbrains.air.contextCompaction`. | The same, without `_meta`. |
 | `agentMessage` | `agent_message_chunk` with `_meta.jetbrains.air.phase` when Codex reports a phase. | No `_meta`. |
 | Command, file change, or sandbox permission request | See [Tool call of the request](#tool-call-of-the-request). | `kind`, `status: pending`, and a generic title such as `Run command` or `Edit files`, also for a started tool call. No `_meta`. |
-| `imageView`, fuzzy search, MCP startup | standard shape | The same. |
+| `imageView`, fuzzy search, MCP startup | standard shape. A fuzzy search that finds no file sends `locations: []`. | The same. |
 
 ## Diff patch
 

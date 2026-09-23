@@ -320,6 +320,7 @@ export const SCENARIOS: Scenario[] = [
                     score: 0.8, indices: null,
                 }],
             }}},
+            {notify: {method: "fuzzyFileSearch/sessionUpdated", params: {sessionId: "search-1", query: "handlr", files: []}}},
             {notify: {method: "fuzzyFileSearch/sessionCompleted", params: {sessionId: "search-1"}}},
         ],
     },

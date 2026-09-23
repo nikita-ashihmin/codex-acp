@@ -195,6 +195,20 @@ describe("clients that are not AIR", () => {
     }
 });
 
+describe("every client", () => {
+    for (const profile of PROFILE_NAMES) {
+        it(`${profile}: gets empty locations when a fuzzy search finds no file`, () => {
+            const reported = updates(profile, "fuzzy-file-search", "fuzzyFileSearch.search-1");
+            expect(reported.map(update => update["locations"])).toEqual([
+                [{path: "/workspace/src/Handler.ts"}],
+                [{path: "/workspace/src/OtherHandler.ts"}],
+                [],
+                undefined,
+            ]);
+        });
+    }
+});
+
 describe("plain ACP client", () => {
     it("declares no terminal channel, so it gets no output chunks and sees the output when the command ends", () => {
         expect(updates("plain", "command-output-stdin", "cmd-1")).toEqual([

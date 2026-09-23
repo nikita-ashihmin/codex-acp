@@ -280,6 +280,7 @@
       "kind": "search",
       "title": "Search for 'App'",
       "status": "in_progress",
+      "locations": [],
       "rawInput": {
         "query": "App"
       }
