@@ -107,6 +107,7 @@ import {
 } from "./FastModeConfig";
 import packageJson from "../package.json";
 import {isJetBrains2026_1Client} from "./JBUtils";
+import {clientSupportsNotices} from "./SessionNotice";
 import {
     createAgentTextMessageChunk,
     createAgentTextThoughtChunk,
@@ -2805,6 +2806,7 @@ export class CodexAcpServer {
                 (accountUpdated) => this.handleAccountUpdated(accountUpdated),
                 agentFileChangeReportRequest !== null,
                 clientSupportsCompaction(this.clientCapabilities),
+                clientSupportsNotices(this.clientCapabilities),
             );
             eventHandler = promptEventHandler;
             const permissionLifecycle = this.permissionLifecycleContext(sessionState);

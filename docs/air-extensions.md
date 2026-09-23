@@ -821,6 +821,10 @@ The extension is active when the client declares `sessionFailure`.
 Without it, the adapter keeps the legacy behavior:
 JSON-RPC errors, `Warning:` and `Config warning:` text chunks, and `session_info_update._meta.codex.error`.
 
+A client can also declare the ACP `clientCapabilities.session.notices`.
+Then a `warning`, `configWarning`, or `deprecationNotice` notification goes out as an ACP `notice` session update.
+It does not go out as a `sessionFailure` record. Errors still use `sessionFailure`.
+
 ### Record
 
 ```json
