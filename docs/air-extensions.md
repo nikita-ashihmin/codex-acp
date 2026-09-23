@@ -169,7 +169,7 @@ The adapter sends these keys only to AIR. "AIR" in the gate column means that th
 | `agentFileChangeReportRequest` | `session/prompt` request `_meta.jetbrains.air` (client to agent) | `{version: 1, requestId}` | `agentFileChangeReport` |
 | `agentFileChangeReport` | `session_info_update._meta.jetbrains.air` | report object | `agentFileChangeReport` |
 | `sessionFailure` | `session_info_update._meta.jetbrains.air` or `PromptResponse._meta.jetbrains.air` | failure record | `sessionFailure` |
-| `subagent` | `tool_call._meta.jetbrains.air` of a collaboration or subagent activity item | `true` | AIR |
+| `subagent` | `tool_call._meta.jetbrains.air` of a `spawnAgent` collaboration item or a subagent activity item | `true` | AIR |
 | `contextCompaction` | `tool_call` and `tool_call_update` `_meta.jetbrains.air` of the synthetic compaction tool call | `{version: 1}` | AIR, when the client has no ACP compaction |
 | `fork` | `session/fork` request `_meta.jetbrains.air` (client to agent) | `{version: 1, messageId, messageFingerprint?, messageOccurrence?}` | none |
 | `phase` | `agent_message_chunk._meta.jetbrains.air` | Codex message phase string | AIR |
@@ -236,7 +236,7 @@ see [Codex items and ACP fields](#codex-items-and-acp-fields).
 | Tool parameters | `rawInput`, once they are complete, and again only when they change |
 | File text of an edit | the diff in `content`, a patch when `diffPatch` is negotiated, never also in `rawInput` |
 | Result to show (read text, search hits, MCP text result, review verdict) | `content` |
-| Result without a display form (structured MCP result, MCP error, agent states, elicitation action) | `rawOutput` |
+| Result without a display form (structured MCP result, MCP error, elicitation action) | `rawOutput` |
 | Command output | the terminal channel that the client negotiated |
 | MCP progress | `_meta.mcp_output_delta`, appended, with the text unchanged |
 | Status, title, kind, locations | the field itself, only when it changes |
@@ -280,7 +280,7 @@ The other clients get the same fields as before the AIR extensions.
 | `fileChange` | `kind: edit`, `title: "Editing files"`, one `diff` block per changed file with `oldText` and `newText`. The block has `_meta.kind` `add`, `update`, or `delete`. With `diffPatch`, each block carries a Git patch. | The same, without a patch. |
 | `mcpToolCall` | `kind: execute`, `title: "mcp.<server>.<tool>"`, `rawInput = {server, tool, arguments}`, `_meta.is_mcp_tool_call`. Text, image, and resource link blocks go to `content`. Other blocks, `structuredContent`, and the error go to `rawOutput`. Progress goes to `_meta.mcp_output_delta`. | No `content`. `rawOutput = {result, error}` with the whole Codex result and error. |
 | `dynamicToolCall` | `name`, `kind: execute`, `title` is the tool, `rawInput = {arguments}`. The content items go to `content`. | The same. |
-| `collabAgentToolCall`, without native subagent sessions | `kind: other`, `title` is the Codex tool name, `rawInput` holds the prompt, the thread ids, the model, and the effort. `agentsStates` go to `rawOutput`. `_meta.jetbrains.air.subagent: true`. Without `rawInputRendering`, one copy of the prompt in `content`. | `rawInput` also holds `agentsStates` and the Codex `status`. No `rawOutput`, no `content`, no `_meta`. |
+| `collabAgentToolCall`, without native subagent sessions | `kind: other`, `title` is the Codex tool name, `rawInput` holds the prompt, `senderThreadId`, `receiverThreadIds`, `agentsStates`, the model, and the effort. AIR recognizes a collaboration tool call by these three keys. Only `spawnAgent` gets `_meta.jetbrains.air.subagent: true`. Without `rawInputRendering`, one copy of the prompt in `content`. | `rawInput` also holds the Codex `status`. No `rawOutput`, no `content`, no `_meta`. |
 | `subAgentActivity`, without native subagent sessions | `kind: other`, a title such as `Start subagent <name>`, `rawInput = {agentThreadId, agentPath, activityKind}`, `_meta.jetbrains.air.subagent: true`. | The same, without `_meta`. |
 | Guardian approval review | `toolCallId: guardian_assessment:<reviewId>`, `kind: think`, `title: "Guardian Review"`, `rawInput = {action}`. The verdict goes to `content`. Without `rawInputRendering`, one `Action: ...` text in `content`. | One text in `content` with the status, the action, the risk, the authorization, and the rationale. The start has the whole Codex event in `rawInput`, a later report in `rawOutput`. |
 | MCP elicitation shown as a permission | A standalone tool call with `rawInput = {serverName, description, schema}` or `{serverName, description, url}`. Without `rawInputRendering`, one copy of the question in `content`. | The same, with the question in `content`. |
@@ -916,7 +916,7 @@ This section covers only the AIR bridge.
 - Either signal enables native subagent sessions. New clients must prefer the canonical field.
 - The agent always advertises `agentCapabilities.sessionCapabilities.subagents`. It advertises `nativeSubagentSessions` to AIR.
 - Without either signal, a Codex subagent stays an ordinary tool call.
-  AIR gets `_meta.jetbrains.air.subagent: true` on it. Another client gets the tool call without `_meta`.
+  AIR gets `_meta.jetbrains.air.subagent: true` on a spawn. Another client gets the tool call without `_meta`.
 
 ## Context compaction
 

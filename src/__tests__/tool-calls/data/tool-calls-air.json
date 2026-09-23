@@ -236,16 +236,14 @@
         "receiverThreadIds": [
           "child"
         ],
-        "model": null,
-        "reasoningEffort": null
-      },
-      "rawOutput": {
         "agentsStates": {
           "child": {
             "status": "completed",
             "message": null
           }
-        }
+        },
+        "model": null,
+        "reasoningEffort": null
       },
       "_meta": {
         "jetbrains": {

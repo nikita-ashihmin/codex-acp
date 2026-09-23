@@ -399,18 +399,36 @@ describe("AIR", () => {
         ]);
     });
 
-    it("gets _meta.jetbrains.air.subagent on a subagent tool call without native subagent sessions", async () => {
-        const capabilities = {
-            ...PROFILES.air,
-            _meta: {
-                terminal_output_delta: true,
-                jetbrains: {air: {version: 1, capabilities: AIR_CAPABILITY_NAMES.filter(name => name !== "nativeSubagentSessions")}},
-            },
+    const airWithoutNativeSubagents = {
+        ...PROFILES.air,
+        _meta: {
+            terminal_output_delta: true,
+            jetbrains: {air: {version: 1, capabilities: AIR_CAPABILITY_NAMES.filter(name => name !== "nativeSubagentSessions")}},
+        },
+    };
+
+    /** The `collab-agent` scenario with another Codex collaboration tool. */
+    function collabScenario(tool: string): Scenario {
+        const base = scenario("collab-agent");
+        return {
+            ...base,
+            steps: base.steps!.map(step => {
+                if (!("notify" in step)) return step;
+                const params = step.notify["params"] as {item: Record<string, unknown>};
+                return {notify: {...step.notify, params: {...params, item: {...params.item, tool}}}};
+            }),
         };
-        const messages = normalize(await runScenario(scenario("collab-agent"), capabilities));
-        const started = messages.map(message => (message.params as {update?: Update}).update)
-            .find(update => update?.["toolCallId"] === "collab-1");
-        expect(started).toEqual({
+    }
+
+    async function collabUpdates(tool: string): Promise<Update[]> {
+        const messages = normalize(await runScenario(collabScenario(tool), airWithoutNativeSubagents));
+        return messages.map(message => (message.params as {update?: Update}).update)
+            .filter((update): update is Update => update?.["toolCallId"] === "collab-1");
+    }
+
+    it("gets _meta.jetbrains.air.subagent and the collaboration keys in rawInput on a spawn without native subagent sessions", async () => {
+        const reported = await collabUpdates("spawnAgent");
+        expect(reported[0]).toEqual({
             sessionUpdate: "tool_call",
             toolCallId: "collab-1",
             kind: "other",
@@ -420,13 +438,30 @@ describe("AIR", () => {
                 prompt: "Find the weather in Paris.",
                 senderThreadId: "session-1",
                 receiverThreadIds: ["child-thread"],
+                agentsStates: {"child-thread": {status: "running", message: "Checking"}},
                 model: null,
                 reasoningEffort: null,
             },
-            rawOutput: {agentsStates: {"child-thread": {status: "running", message: "Checking"}}},
             _meta: {jetbrains: {air: {version: 1, subagent: true}}},
         });
+        expect(reported[1]).toMatchObject({
+            status: "completed",
+            rawInput: expect.objectContaining({agentsStates: {"child-thread": {status: "completed", message: "Sunny"}}}),
+        });
+        expect(reported.every(update => update["rawOutput"] === undefined)).toBe(true);
     });
+
+    for (const tool of ["wait", "sendInput", "resumeAgent", "closeAgent"]) {
+        it(`gets no _meta.jetbrains.air.subagent on ${tool}, which controls an existing subagent`, async () => {
+            const reported = await collabUpdates(tool);
+            expect(reported[0]!["rawInput"]).toEqual(expect.objectContaining({
+                senderThreadId: "session-1",
+                receiverThreadIds: ["child-thread"],
+                agentsStates: {"child-thread": {status: "running", message: "Checking"}},
+            }));
+            expect(reported.map(update => update["_meta"])).toEqual([undefined, undefined]);
+        });
+    }
 
     it("gets no key of the pre-contract shape", () => {
         const text = SCENARIOS.map(each => JSON.stringify(recording("air", each.name))).join("\n");
