@@ -571,6 +571,10 @@ The deprecated `execCommandApproval` and `applyPatchApproval` methods are not a 
 
 ### Plan stream
 
+AIR accepts a plan in one of two modes: streamed text, or a path to a file that AIR follows. An agent that writes
+its plan to a file sends the path. Codex keeps the plan only as text, so this adapter always uses the streamed mode.
+It does not declare the AIR `planFile` capability.
+
 Codex writes a Markdown plan in plan mode. The adapter streams it:
 
 - A client that declares the draft `clientCapabilities.plan` gets `plan_update` with `plan = {type: "markdown", planId, content}`.
