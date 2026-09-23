@@ -51,9 +51,10 @@ A client that does not declare it, for example Zed or a plain ACP client, gets t
 The fields have the same values in the same places.
 Only these differences are allowed:
 
-- A `tool_call_update` omits a field or a `_meta` key that did not change since the last report of the same tool call.
+- A `tool_call_update` omits a top-level field that did not change since the last report of the same tool call.
   The permission request of a tool call counts as a report. ACP clients merge an update into the stored tool call.
   After a cancelled or failed permission request, the next update carries every field again.
+  ACP defines no merge for `_meta` keys, so the `_meta` of each report keeps every key that the adapter sent before.
 - Bug fixes: a unique MCP startup tool call id, the result of a dynamic tool in `content`,
   and no output after a tool call ended.
 - The client gets no AIR-only key.
@@ -184,7 +185,7 @@ The adapter keeps them where they are.
 
 | Key | Where | Meaning |
 | --- | --- | --- |
-| `terminal_output_delta` | client `initialize` `clientCapabilities._meta.terminal_output_delta: true`; tool call `_meta.terminal_output_delta = {terminal_id, data}` | The client appends each chunk of command output. Only a client that declares it gets it. |
+| `terminal_output_delta` | client `initialize` `clientCapabilities._meta.terminal_output_delta: true`; tool call `_meta.terminal_output_delta = {terminal_id, data}` | The client appends each chunk of command output. AIR gets it only when it declares it. A client that is not AIR also gets it when it declares no other channel, see [Zed conventions](#zed-conventions). |
 | `terminal_input` | tool call `_meta.terminal_input = {terminal_id, data}` | Text that was written to the stdin of a running command. It is not output. Only AIR gets it. |
 | `mcp_output_delta` | tool call `_meta.mcp_output_delta = {data}` | MCP progress text to append, trimmed. AIR does not get it. |
 | `is_mcp_tool_call` | tool call `_meta.is_mcp_tool_call: true` | The tool call is an MCP tool call. |
@@ -204,21 +205,25 @@ The terminal id is the tool call id.
 The output channel follows the declaration of the client:
 
 - A client that declares `terminal_output_delta` gets the output chunks of every command in `_meta.terminal_output_delta`.
-- Otherwise, a client that declares `terminal_output` gets output chunks in `_meta.terminal_output = {terminal_id, data}`.
-  Zed declares `terminal_output: true` and `terminal-auth: true`.
-  Only a command that shows a terminal gets these chunks. A read, search, or list command gets none.
-- A client that declares neither gets no output chunks.
+- Otherwise, a client that declares `terminal_output` gets output chunks in `_meta.terminal_output = {terminal_id, data}`
+  for a command that shows a terminal. Zed declares `terminal_output: true` and `terminal-auth: true`.
+  The chunks of a read, search, or list command go to `_meta.terminal_output_delta`.
+- A client that is not AIR and declares neither gets every output chunk in `_meta.terminal_output_delta`.
+  This is the behavior of the adapter before the tool call contract.
+- AIR that declares neither gets no output chunks.
 
 A client that is not AIR also keeps these fields:
 
 - The end of a command carries `rawOutput = {formatted_output, exit_code}`, with the whole output.
   A client that declares `terminal_output_delta` does not get it for a live command.
   A replayed command always carries it.
-- Output that did not stream goes in one chunk at the end, when the client has a channel for the command.
+- Output that did not stream goes in one chunk at the end, for a command that shows a terminal.
+  A live read, search, or list command sends this chunk only to a client that declares `terminal_output_delta`.
 - The text that was written to the stdin of a command goes to the output channel as `\n<stdin>\n`.
 - The output of a read, search, or list command is in `rawOutput.formatted_output`, not in `content`.
 
-So a plain ACP client sees the output of every command in `rawOutput.formatted_output` when the command ends.
+So a plain ACP client gets the output chunks in `_meta.terminal_output_delta`,
+and it sees the output of every command in `rawOutput.formatted_output` when the command ends.
 
 AIR gets no `rawOutput.formatted_output` and no `rawOutput.exit_code`.
 AIR gets stdin in `_meta.terminal_input`, and the output of a read, search, or list command once in `content`.
@@ -263,7 +268,8 @@ Rules:
 - `ToolFacts.standard` holds the fields of a client that is not AIR, where they differ from the contract fields.
   The renderer applies them for such a client and sends it no AIR key.
 - A changed-field filter drops the fields that an earlier report of the same tool call already sent.
-  It applies to every client.
+  It applies to the top-level fields for every client.
+  It drops an unchanged `_meta` key only for AIR, because ACP defines no merge for `_meta` keys.
 - The `jetbrains.air` capabilities are AIR capabilities.
   The adapter does not treat them as a generic client feature.
 
