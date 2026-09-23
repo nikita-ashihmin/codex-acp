@@ -22,6 +22,18 @@ describe("PendingNotificationBuffer", () => {
         ]);
     });
 
+    it("does not change the notification objects that the caller pushed", () => {
+        const buffer = new PendingNotificationBuffer("child");
+        const first = delta("a", "Hel");
+        const second = delta("a", "lo");
+        buffer.push(first);
+        buffer.push(second);
+
+        expect(first).toEqual(delta("a", "Hel"));
+        expect(second).toEqual(delta("a", "lo"));
+        expect((buffer.take()[0]!.params as {delta: string}).delta).toBe("Hello");
+    });
+
     it("keeps thousands of deltas without a loss", () => {
         const buffer = new PendingNotificationBuffer("child");
         for (let index = 0; index < 5000; index++) buffer.push(delta("a", "x"));

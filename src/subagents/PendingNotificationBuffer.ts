@@ -38,7 +38,8 @@ export class PendingNotificationBuffer {
             return;
         }
         if (!this.reserve(Buffer.byteLength(JSON.stringify(notification), "utf8"))) return;
-        this.notifications.push(notification);
+        // A copy, because a merge replaces the params of the stored notification.
+        this.notifications.push({...notification});
     }
 
     take(): ServerNotification[] {
