@@ -4,6 +4,7 @@ import type { SessionState } from "../../CodexAcpServer";
 import { AgentMode } from "../../AgentMode";
 import {ACPSessionConnection} from "../../ACPSessionConnection";
 import {CodexSubagentEventRouter} from "../../subagents/CodexSubagentEventRouter";
+import {ToolCallReports} from "../../ToolCallReports";
 import {
     createCodexMockTestFixture,
     createTestSessionState,
@@ -1638,5 +1639,95 @@ describe("CodexEventHandler - collab agent tool call events", () => {
             .filter(event => event.method === "sessionUpdate"
                 && event.args[0].update.sessionUpdate === "subagent_state_update");
         expect(terminal).toHaveLength(1);
+    });
+
+    describe("releases the open tool call records of a child session when the child ends", () => {
+        const spawn = (childThreadId: string): ServerNotification => ({
+            method: "item/started",
+            params: {
+                threadId: sessionId,
+                turnId: "root-turn",
+                startedAtMs: 0,
+                item: {
+                    type: "collabAgentToolCall",
+                    id: `spawn-${childThreadId}`,
+                    tool: "spawnAgent",
+                    status: "inProgress",
+                    senderThreadId: sessionId,
+                    receiverThreadIds: [childThreadId],
+                    prompt: "Task",
+                    model: null,
+                    reasoningEffort: null,
+                    agentsStates: {[childThreadId]: {status: "running", message: null}},
+                },
+            },
+        });
+        const activity = (childThreadId: string): ServerNotification => ({
+            method: "item/started",
+            params: {
+                threadId: sessionId,
+                turnId: "root-turn",
+                startedAtMs: 0,
+                item: {
+                    type: "subAgentActivity",
+                    id: `activity-${childThreadId}`,
+                    kind: "started",
+                    agentThreadId: childThreadId,
+                    agentPath: `/root/${childThreadId}`,
+                },
+            },
+        });
+        const turnCompleted = (threadId: string, status: "completed" | "failed"): ServerNotification => ({
+            method: "turn/completed",
+            params: {
+                threadId,
+                turn: {
+                    id: `${threadId}-turn`,
+                    items: [],
+                    itemsView: "notLoaded",
+                    status,
+                    error: null,
+                    startedAt: null,
+                    completedAt: null,
+                    durationMs: null,
+                },
+            },
+        });
+        const report = {sessionUpdate: "tool_call_update" as const, toolCallId: "child-tool", title: "npm test"};
+
+        async function childRouter(reports: ToolCallReports, childThreadId: string, materialize: boolean) {
+            const router = new CodexSubagentEventRouter(
+                sessionId,
+                true,
+                new ACPSessionConnection(mockFixture.getAcpConnection(), sessionId),
+                childSessionId => reports.releaseOpen(childSessionId),
+            );
+            await router.handle(spawn(childThreadId));
+            if (materialize) await router.handle(activity(childThreadId));
+            reports.prepare(childThreadId, report);
+            expect(reports.prepare(childThreadId, report)).toBeNull();
+            return router;
+        }
+
+        it("on a child turn/completed", async () => {
+            const reports = new ToolCallReports();
+            const router = await childRouter(reports, "child-a", true);
+            await router.handle(turnCompleted("child-a", "completed"));
+            expect(reports.prepare("child-a", report)).toEqual(report);
+        });
+
+        it("when the root turn fails and the adapter finishes the outstanding children", async () => {
+            const reports = new ToolCallReports();
+            const router = await childRouter(reports, "child-b", true);
+            await router.finishOutstanding("failed");
+            expect(reports.prepare("child-b", report)).toEqual(report);
+        });
+
+        it("when a pending child ends before it has a session", async () => {
+            const reports = new ToolCallReports();
+            const router = await childRouter(reports, "child-c", false);
+            await router.handle(turnCompleted("child-c", "failed"));
+            expect(reports.prepare("child-c", report)).toEqual(report);
+        });
     });
 });

@@ -45,10 +45,15 @@ export class CodexSubagentEventRouter {
     private readonly replayQueue: ServerNotification[] = [];
     private readonly activeLegacyActivities = new Set<string>();
 
+    /**
+     * @param onChildSessionEnded runs when a native child session ends, so that the owner can release
+     *   the state that it keeps per child session.
+     */
     constructor(
         private readonly rootSessionId: string,
         private readonly supported: boolean,
         private readonly session: ACPSessionConnection,
+        private readonly onChildSessionEnded: (sessionId: string) => void = () => {},
     ) {}
 
     async handle(notification: ServerNotification): Promise<boolean> {
@@ -331,6 +336,7 @@ export class CodexSubagentEventRouter {
         if (!pending) return;
         this.pendingSpawns.delete(childSessionId);
         this.terminalPendingSpawns.set(childSessionId, pending);
+        this.onChildSessionEnded(childSessionId);
         this.resolveMaterialization(childSessionId, null);
         this.notifyWaiters();
     }
@@ -350,6 +356,7 @@ export class CodexSubagentEventRouter {
             if (child.terminalState === state) delete child.terminalState;
             throw error;
         }
+        this.onChildSessionEnded(child.sessionId);
         this.notifyWaiters();
     }
 

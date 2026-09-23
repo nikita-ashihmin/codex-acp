@@ -44,7 +44,7 @@ export class ToolCallReports {
     }
 
     /**
-     * Forgets the open tool calls of one session when its turn ends.
+     * Forgets the open tool calls of one session when its turn ends, or when a native child session ends.
      * A tool call that never reached a terminal status would otherwise keep its fields until the session closes.
      * A later update for a forgotten tool call carries every field again, which the client merges as usual.
      */
