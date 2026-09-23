@@ -115,15 +115,6 @@
       "sessionUpdate": "tool_call_update",
       "toolCallId": "mcp",
       "status": "completed",
-      "content": [
-        {
-          "type": "content",
-          "content": {
-            "type": "text",
-            "text": "hit"
-          }
-        }
-      ],
       "rawInput": {
         "server": "docs",
         "tool": "search",
@@ -132,9 +123,19 @@
         }
       },
       "rawOutput": {
-        "structuredContent": {
-          "hits": 1
-        }
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hit"
+            }
+          ],
+          "structuredContent": {
+            "hits": 1
+          },
+          "_meta": null
+        },
+        "error": null
       }
     }
   ],

@@ -540,21 +540,25 @@
         "kind": "execute",
         "title": "mcp.docs.search",
         "status": "completed",
-        "content": [
-          {
-            "type": "content",
-            "content": {
-              "type": "text",
-              "text": "1 hit"
-            }
-          }
-        ],
         "rawInput": {
           "server": "docs",
           "tool": "search",
           "arguments": {
             "query": "acp"
           }
+        },
+        "rawOutput": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "1 hit"
+              }
+            ],
+            "structuredContent": null,
+            "_meta": null
+          },
+          "error": null
         },
         "_meta": {
           "is_mcp_tool_call": true

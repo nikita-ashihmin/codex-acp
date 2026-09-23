@@ -323,19 +323,20 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "mcp-1",
         "status": "completed",
-        "content": [
-          {
-            "type": "content",
-            "content": {
-              "type": "text",
-              "text": "3 hits"
-            }
-          }
-        ],
         "rawOutput": {
-          "structuredContent": {
-            "hits": 3
-          }
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "3 hits"
+              }
+            ],
+            "structuredContent": {
+              "hits": 3
+            },
+            "_meta": null
+          },
+          "error": null
         }
       }
     }
@@ -374,7 +375,10 @@
         "toolCallId": "mcp-2",
         "status": "failed",
         "rawOutput": {
-          "error": "server exploded"
+          "result": null,
+          "error": {
+            "message": "server exploded"
+          }
         }
       }
     }

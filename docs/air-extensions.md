@@ -234,8 +234,8 @@ see [Codex items and ACP fields](#codex-items-and-acp-fields).
 | --- | --- |
 | Tool parameters | `rawInput`, once they are complete, and again only when they change |
 | File text of an edit | the diff in `content`, a patch when `diffPatch` is negotiated, never also in `rawInput` |
-| Result to show (read text, search hits, MCP text result, review verdict) | `content` |
-| Result without a display form (structured MCP result, MCP error, elicitation action) | `rawOutput` |
+| Result to show (read text, search hits, review verdict) | `content` |
+| Result without a display form (MCP result and error, elicitation action) | `rawOutput` |
 | Command output | the terminal channel that the client negotiated |
 | MCP progress | `_meta.mcp_output_delta`, appended, with the text unchanged |
 | Status, title, kind, locations | the field itself, only when it changes |
@@ -277,7 +277,7 @@ The other clients get the same fields as before the AIR extensions.
 | `commandExecution` with one `read`, `search`, or `listFiles` action | `kind` `read` or `search`, a title that names the path or the query, `locations`. The output goes to `content` once, at completion. No terminal. | The same start. The output is in `rawOutput.formatted_output` at completion. |
 | Any other `commandExecution` | `kind: execute`, `title` is the command, `rawInput = {command, cwd}`, a terminal. Output streams to `_meta.terminal_output_delta`. Stdin goes to `_meta.terminal_input`. The end sends `_meta.terminal_exit`. With `asyncTasks`, a command that keeps running gets `_meta.jetbrains.air.asyncTasks.backgrounded`. | The same start. Output and stdin follow [Zed conventions](#zed-conventions). The end also carries `rawOutput.formatted_output` and `rawOutput.exit_code`. |
 | `fileChange` | `kind: edit`, `title: "Editing files"`, one `diff` block per changed file with `oldText` and `newText`. The block has `_meta.kind` `add`, `update`, or `delete`. With `diffPatch`, each block carries a Git patch. | The same, without a patch. |
-| `mcpToolCall` | `kind: execute`, `title: "mcp.<server>.<tool>"`, `rawInput = {server, tool, arguments}`, `_meta.is_mcp_tool_call`. Text, image, and resource link blocks go to `content`. Other blocks, `structuredContent`, and the error go to `rawOutput`. Progress goes to `_meta.mcp_output_delta`. | No `content`. `rawOutput = {result, error}` with the whole Codex result and error. |
+| `mcpToolCall` | `kind: execute`, `title: "mcp.<server>.<tool>"`, `rawInput = {server, tool, arguments}`, `_meta.is_mcp_tool_call`. No `content`. `rawOutput = {result, error}` with the whole Codex result and error. AIR shows the text of `result` and `error.message`. Progress goes to `_meta.mcp_output_delta`. | The same. |
 | `dynamicToolCall` | `name`, `kind: execute`, `title` is the tool, `rawInput = {arguments}`. The content items go to `content`. | The same. |
 | `collabAgentToolCall`, without native subagent sessions | `kind: other`, `title` is the Codex tool name, `rawInput` holds the prompt, `senderThreadId`, `receiverThreadIds`, `agentsStates`, the model, and the effort. AIR recognizes a collaboration tool call by these three keys. Only `spawnAgent` gets `_meta.jetbrains.air.subagent: true`. Without `rawInputRendering`, one copy of the prompt in `content`. | `rawInput` also holds the Codex `status`. No `rawOutput`, no `content`, no `_meta`. |
 | `subAgentActivity`, without native subagent sessions | `kind: other`, a title such as `Start subagent <name>`, `rawInput = {agentThreadId, agentPath, activityKind}`, `_meta.jetbrains.air.subagent: true`. | The same, without `_meta`. |

@@ -380,6 +380,15 @@ describe("AIR", () => {
             .toEqual({version: 1, contextCompaction: {version: 1}});
     });
 
+    it("gets the MCP result and error in rawOutput = {result, error}, and no copy in content", () => {
+        const ends = ["mcp-1", "mcp-2"].map(id => updates("air", "mcp-tool", id).at(-1)!);
+        expect(ends.map(update => update["rawOutput"])).toEqual([
+            {result: {content: [{type: "text", text: "3 hits"}], structuredContent: {hits: 3}, _meta: null}, error: null},
+            {result: null, error: {message: "server exploded"}},
+        ]);
+        expect(ends.map(update => update["content"])).toEqual([undefined, undefined]);
+    });
+
     it("gets the plan text in rawInput.plan of the plan review, and no plan review metadata", () => {
         const review = permissionRequests("air", "plan-review-permission")[0]!;
         expect(review["toolCall"]["rawInput"]).toEqual({plan: "# Plan\n\n1. Make the change."});

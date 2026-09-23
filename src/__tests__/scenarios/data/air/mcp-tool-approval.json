@@ -376,15 +376,19 @@
         "sessionUpdate": "tool_call_update",
         "toolCallId": "mcp-3",
         "status": "completed",
-        "content": [
-          {
-            "type": "content",
-            "content": {
-              "type": "text",
-              "text": "written"
-            }
-          }
-        ]
+        "rawOutput": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "written"
+              }
+            ],
+            "structuredContent": null,
+            "_meta": null
+          },
+          "error": null
+        }
       }
     }
   },
