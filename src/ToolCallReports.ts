@@ -14,9 +14,10 @@ const MAX_FINISHED_TOOL_CALLS = 1024;
 /**
  * Keeps the fields that the adapter reported for each open tool call in one session.
  *
- * ACP clients merge a `tool_call_update` into the stored tool call.
- * A present field replaces the stored value, and a `_meta` key replaces the stored key.
- * So an update carries only the fields that changed since the last report.
+ * ACP clients merge a `tool_call_update` into the stored tool call, and a present field replaces the stored value.
+ * So an update carries only the top-level fields that changed since the last report.
+ * ACP defines no merge for `_meta` keys. AIR replaces a stored `_meta` key with the key of an update,
+ * so only AIR also gets `_meta` without the unchanged keys, see `compareMeta`.
  * The record of a tool call shrinks when the tool call reaches a terminal status.
  * A bounded set of finished tool calls keeps the small fields, so that late output chunks can be dropped
  * and a completion after a replayed start does not repeat the status.
@@ -24,6 +25,12 @@ const MAX_FINISHED_TOOL_CALLS = 1024;
 export class ToolCallReports {
     private readonly openToolCalls = new Map<string, Map<string, string>>();
     private readonly finishedToolCalls = new Map<string, Map<string, string>>();
+
+    /**
+     * Also drop the unchanged `_meta` keys. The adapter sets it for AIR in `initialize`.
+     * Every other client gets the whole `_meta` of each report, as before the tool call contract.
+     */
+    compareMeta = true;
 
     /**
      * Returns the update to send, without the fields that did not change.
@@ -63,7 +70,7 @@ export class ToolCallReports {
     private recordStart(key: string, update: ToolCallReport): ToolCallReport {
         this.finishedToolCalls.delete(key);
         const fields = new Map<string, string>();
-        for (const [name, value] of reportedFields(update)) {
+        for (const [name, value] of reportedFields(update, this.compareMeta)) {
             fields.set(name, value);
         }
         this.openToolCalls.set(key, fields);
@@ -89,7 +96,7 @@ export class ToolCallReports {
     ): ToolCallReport | null {
         const prepared: Record<string, unknown> = {...update};
         const meta = isRecord(update._meta) ? {...update._meta} : undefined;
-        for (const [name, value] of reportedFields(update)) {
+        for (const [name, value] of reportedFields(update, this.compareMeta)) {
             if (fields.get(name) === value) {
                 if (name.startsWith(META_FIELD_PREFIX)) {
                     delete meta?.[name.slice(META_FIELD_PREFIX.length)];
@@ -146,14 +153,14 @@ export class ToolCallReports {
     }
 }
 
-function reportedFields(update: ToolCallReport): Array<[string, string]> {
+function reportedFields(update: ToolCallReport, withMeta: boolean): Array<[string, string]> {
     const fields: Array<[string, string]> = [];
     const record = update as Record<string, unknown>;
     for (const name of COMPARED_FIELDS) {
         const value = record[name];
         if (value !== undefined) fields.push([name, JSON.stringify(value)]);
     }
-    if (isRecord(update._meta)) {
+    if (withMeta && isRecord(update._meta)) {
         for (const [name, value] of Object.entries(update._meta)) {
             if (value === undefined || OUTPUT_DELTA_META_KEYS.has(name)) continue;
             fields.push([`${META_FIELD_PREFIX}${name}`, JSON.stringify(value)]);

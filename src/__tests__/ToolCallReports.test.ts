@@ -28,6 +28,36 @@ describe("ToolCallReports", () => {
         });
     });
 
+    it("keeps every _meta key for a client that is not AIR, because ACP defines no merge for _meta", () => {
+        const reports = new ToolCallReports();
+        reports.compareMeta = false;
+        reports.prepare("s", {
+            sessionUpdate: "tool_call",
+            toolCallId: "cmd-1",
+            title: "npm test",
+            status: "in_progress",
+            _meta: {terminal_info: {cwd: "/w", terminal_id: "cmd-1"}, codex: {tool: "exec"}},
+        });
+
+        expect(reports.prepare("s", {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            title: "npm test",
+            status: "completed",
+            _meta: {terminal_info: {cwd: "/w", terminal_id: "cmd-1"}, codex: {tool: "exec"}},
+        })).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            status: "completed",
+            _meta: {terminal_info: {cwd: "/w", terminal_id: "cmd-1"}, codex: {tool: "exec"}},
+        });
+        expect(reports.prepare("s", {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-1",
+            _meta: {codex: {tool: "exec"}},
+        })).toEqual({sessionUpdate: "tool_call_update", toolCallId: "cmd-1", _meta: {codex: {tool: "exec"}}});
+    });
+
     it("keeps fields that changed since the start", () => {
         const reports = new ToolCallReports();
         reports.prepare("s", {
