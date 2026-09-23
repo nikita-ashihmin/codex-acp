@@ -190,12 +190,12 @@ describe("CodexACPAgent - plan review", () => {
                     {optionId: "implement_plan", name: "Yes, implement this plan", kind: "allow_once"},
                     {optionId: "revise_plan", name: "No, and tell Codex what to do differently", kind: "reject_once"},
                 ],
-                _meta: {jetbrains: {air: {version: 1, planReview: {planItemId: "plan-item"}}}},
             })],
         });
-        // The client already has the plan, so the request does not repeat it.
+        // AIR reads the plan of the review from rawInput.plan.
         const request = events.find(event => event.method === "requestPermission")!;
-        expect(request.args[0].toolCall).not.toHaveProperty("rawInput");
+        expect(request.args[0].toolCall.rawInput).toEqual({plan: "# Implementation plan\n\n1. Make the change."});
+        expect(request.args[0]).not.toHaveProperty("_meta");
         expect(events).toContainEqual({
             method: "sessionUpdate",
             args: [{

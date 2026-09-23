@@ -26,7 +26,6 @@ export const AIR_KIND_KEY = "kind";
 export const AIR_COMMAND_ACTION_KEY = "commandAction";
 export const AIR_PERMISSION_KEY = "permission";
 export const AIR_CONTEXT_COMPACTION_KEY = "contextCompaction";
-export const AIR_PLAN_REVIEW_KEY = "planReview";
 export const AIR_EXTENSION_VERSION = 1;
 
 /** Merge one AIR payload into metadata while preserving other object namespaces. */

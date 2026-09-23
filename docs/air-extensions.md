@@ -161,7 +161,6 @@ The adapter sends these keys only to AIR. "AIR" in the gate column means that th
 | `goal` | `session_info_update._meta.jetbrains.air` | goal snapshot or `null` | AIR |
 | `diffPatch` | tool call `content[]` of type `diff`, `_meta.jetbrains.air` | `{version: 1, format: "git_patch", text}` | `diffPatch` |
 | `contentDelta` | `plan_update._meta.jetbrains.air` | string | `planContentDelta` |
-| `planReview` | `session/request_permission` request `_meta.jetbrains.air` | `{planItemId}` | AIR |
 | `permission` | `session/request_permission` request `_meta.jetbrains.air` | `{version: 1, title, description?}` | AIR |
 | `permission` | permission option `_meta.jetbrains.air` | `{version: 1, description}` | AIR |
 | `recommendedValue` | `model` and `reasoning_effort` config options, `_meta.jetbrains.air` | option value string | `recommendedValue` |
@@ -288,7 +287,6 @@ The other clients get the same fields as before the AIR extensions.
 | `imageGeneration` | `kind: other`, `title: "Image generation"`. The revised prompt and the image go to `content`. A saved image without data goes to `content` as a resource link. | The start has `rawInput = {id}`. The end has `rawOutput = {status, revisedPrompt, result, savedPath}`, and no resource link. |
 | `plan` item (the Markdown plan of plan mode) | With `planContentDelta`, appended text in `plan_update`. | `plan_update` snapshots when the client shows plans. Otherwise the whole plan in one `agent_message_chunk` when the plan item completes. |
 | Turn plan (`turn/plan/updated`) | standard `plan` with entries | The same. |
-| Completed plan in plan mode | A plan review permission request with `_meta.jetbrains.air.planReview`. | The request carries the plan text in `rawInput.plan` and no `_meta`. |
 | `contextCompaction` | `compaction_update` when the client declares `session.compaction`. Otherwise a synthetic tool call with `_meta.jetbrains.air.contextCompaction`. | The same, without `_meta`. |
 | `agentMessage` | `agent_message_chunk` with `_meta.jetbrains.air.phase` when Codex reports a phase. | No `_meta`. |
 | Command, file change, or sandbox permission request | See [Tool call of the request](#tool-call-of-the-request). | `kind`, `status: pending`, and a generic title such as `Run command` or `Edit files`, also for a started tool call. No `_meta`. |
@@ -597,12 +595,12 @@ When a completed plan differs from the streamed text, the adapter sends a snapsh
 ### Plan review
 
 After a completed plan, the adapter asks the user whether to implement it.
-The request names the plan item and does not repeat the plan text:
+Every client gets the same request:
 
 - `toolCallId: plan-review:<planItemId>`, `kind: switch_mode`, `title: "Implement this plan?"`.
+- The plan text in `toolCall.rawInput.plan`. AIR reads the plan of the review there.
 - Options `implement_plan` (`allow_once`) and `revise_plan` (`reject_once`).
-- For AIR, `_meta.jetbrains.air.planReview = {planItemId}`.
-- A client that is not AIR gets the plan text in `toolCall.rawInput.plan` and no `_meta`.
+- No `_meta`.
 
 The final update of that tool call puts the decision text in `rawOutput`.
 
@@ -976,6 +974,6 @@ AIR gets only the new key. A client that is not AIR gets neither the old key nor
 The adapter does not send these keys to any client:
 
 - `_meta.codex.subagent` and `_meta.codex.collaboration`;
-- the plan review `_meta.codex.kind` and `_meta.codex.planItemId`, replaced by `_meta.jetbrains.air.planReview`;
+- the plan review `_meta.codex.kind` and `_meta.codex.planItemId`;
 - the permission `_meta.permission`, replaced by `_meta.jetbrains.air.permission`;
 - the diff `_meta.jetbrains.air.diffStats`.

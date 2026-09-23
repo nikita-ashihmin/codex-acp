@@ -1,5 +1,4 @@
 import type * as acp from "@agentclientprotocol/sdk";
-import {AIR_PLAN_REVIEW_KEY, withAirMeta} from "../../AirExtension";
 import type {CompletedPlan} from "../../CodexEventHandler";
 import type {AcpToolCallRenderer} from "../AcpToolCallRenderer";
 import type {ToolFacts} from "../ToolFacts";
@@ -9,8 +8,8 @@ const REVISE_PLAN_OPTION_ID = "revise_plan";
 
 /**
  * Reports the approval of a completed Codex plan.
- * AIR already received the plan, so the request names the plan item and does not repeat the text.
- * Every other client gets the plan text in `rawInput`.
+ * Every client gets the plan text in `rawInput.plan`.
+ * AIR reads it there for the summary and the approval card of the plan review.
  */
 export class PlanReviewReporter {
     static permissionRequest(
@@ -25,7 +24,7 @@ export class PlanReviewReporter {
                 title: "Implement this plan?",
                 kind: "switch_mode",
                 status: "pending",
-                standard: {rawInput: {plan: plan.text}},
+                input: {plan: plan.text},
             }),
             options: [
                 {optionId: IMPLEMENT_PLAN_OPTION_ID, name: "Yes, implement this plan", kind: "allow_once"},
@@ -35,9 +34,6 @@ export class PlanReviewReporter {
                     kind: "reject_once",
                 },
             ],
-            ...(renderer.capabilities.airClient
-                ? {_meta: withAirMeta(undefined, AIR_PLAN_REVIEW_KEY, {planItemId: plan.itemId})}
-                : {}),
         };
     }
 

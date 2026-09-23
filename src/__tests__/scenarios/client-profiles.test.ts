@@ -378,9 +378,12 @@ describe("AIR", () => {
         });
         expect(air(updates("air", "context-compaction", "compact-1")[0]!["_meta"]))
             .toEqual({version: 1, contextCompaction: {version: 1}});
+    });
+
+    it("gets the plan text in rawInput.plan of the plan review, and no plan review metadata", () => {
         const review = permissionRequests("air", "plan-review-permission")[0]!;
-        expect(air(review["_meta"])).toEqual({version: 1, planReview: {planItemId: "plan-2"}});
-        expect(review["toolCall"]).not.toHaveProperty("rawInput");
+        expect(review["toolCall"]["rawInput"]).toEqual({plan: "# Plan\n\n1. Make the change."});
+        expect(review).not.toHaveProperty("_meta");
     });
 
     it("gets a streamed plan as plan_update snapshots and _meta.jetbrains.air.contentDelta appends", () => {
