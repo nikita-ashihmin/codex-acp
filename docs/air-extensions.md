@@ -54,7 +54,7 @@ Only these differences are allowed:
 - A `tool_call_update` omits a field or a `_meta` key that did not change since the last report of the same tool call.
   The permission request of a tool call counts as a report. ACP clients merge an update into the stored tool call.
 - Bug fixes: a unique MCP startup tool call id, the result of a dynamic tool in `content`,
-  the MCP progress text without trimming, and no output after a tool call ended.
+  and no output after a tool call ended.
 - The client gets no AIR-only key.
   That is no `_meta.jetbrains.air` key and none of the earlier keys in [Removed keys](#removed-keys).
 
@@ -185,7 +185,7 @@ The adapter keeps them where they are.
 | --- | --- | --- |
 | `terminal_output_delta` | client `initialize` `clientCapabilities._meta.terminal_output_delta: true`; tool call `_meta.terminal_output_delta = {terminal_id, data}` | The client appends each chunk of command output. Only a client that declares it gets it. |
 | `terminal_input` | tool call `_meta.terminal_input = {terminal_id, data}` | Text that was written to the stdin of a running command. It is not output. Only AIR gets it. |
-| `mcp_output_delta` | tool call `_meta.mcp_output_delta = {data}` | MCP progress text to append, unchanged. |
+| `mcp_output_delta` | tool call `_meta.mcp_output_delta = {data}` | MCP progress text to append, trimmed. AIR does not get it. |
 | `is_mcp_tool_call` | tool call `_meta.is_mcp_tool_call: true` | The tool call is an MCP tool call. |
 | `is_mcp_tool_approval` | `session/request_permission` request `_meta.is_mcp_tool_approval: true` | The permission request approves an MCP tool call. |
 | `steering` | `initialize` response `_meta.steering = {supported: true}` | The agent accepts `_session/steering` for a running turn. |
@@ -237,7 +237,7 @@ see [Codex items and ACP fields](#codex-items-and-acp-fields).
 | Result to show (read text, search hits, review verdict) | `content` |
 | Result without a display form (MCP result and error, elicitation action) | `rawOutput` |
 | Command output | the terminal channel that the client negotiated |
-| MCP progress | `_meta.mcp_output_delta`, appended, with the text unchanged |
+| MCP progress | none, AIR does not show it |
 | Status, title, kind, locations | the field itself, only when it changes |
 
 Rules:
@@ -277,7 +277,7 @@ The other clients get the same fields as before the AIR extensions.
 | `commandExecution` with one `read`, `search`, or `listFiles` action | `kind` `read` or `search`, a title that names the path or the query, `locations`. The output goes to `content` once, at completion. No terminal. | The same start. The output is in `rawOutput.formatted_output` at completion. |
 | Any other `commandExecution` | `kind: execute`, `title` is the command, `rawInput = {command, cwd}`, a terminal. Output streams to `_meta.terminal_output_delta`. Stdin goes to `_meta.terminal_input`. The end sends `_meta.terminal_exit`. With `asyncTasks`, a command that keeps running gets `_meta.jetbrains.air.asyncTasks.backgrounded`. | The same start. Output and stdin follow [Zed conventions](#zed-conventions). The end also carries `rawOutput.formatted_output` and `rawOutput.exit_code`. |
 | `fileChange` | `kind: edit`, `title: "Editing files"`, one `diff` block per changed file with `oldText` and `newText`. The block has `_meta.kind` `add`, `update`, or `delete`. With `diffPatch`, each block carries a Git patch. | The same, without a patch. |
-| `mcpToolCall` | `kind: execute`, `title: "mcp.<server>.<tool>"`, `rawInput = {server, tool, arguments}`, `_meta.is_mcp_tool_call`. No `content`. `rawOutput = {result, error}` with the whole Codex result and error. AIR shows the text of `result` and `error.message`. Progress goes to `_meta.mcp_output_delta`. | The same. |
+| `mcpToolCall` | `kind: execute`, `title: "mcp.<server>.<tool>"`, `rawInput = {server, tool, arguments}`, `_meta.is_mcp_tool_call`. No `content`. `rawOutput = {result, error}` with the whole Codex result and error. AIR shows the text of `result` and `error.message`. No progress. | The same. The progress text goes to `_meta.mcp_output_delta`, trimmed. |
 | `dynamicToolCall` | `name`, `kind: execute`, `title` is the tool, `rawInput = {arguments}`. The content items go to `content`. | The same. |
 | `collabAgentToolCall`, without native subagent sessions | `kind: other`, `title` is the Codex tool name, `rawInput` holds the prompt, `senderThreadId`, `receiverThreadIds`, `agentsStates`, the model, and the effort. AIR recognizes a collaboration tool call by these three keys. Only `spawnAgent` gets `_meta.jetbrains.air.subagent: true`. Without `rawInputRendering`, one copy of the prompt in `content`. | `rawInput` also holds the Codex `status`. No `rawOutput`, no `content`, no `_meta`. |
 | `subAgentActivity`, without native subagent sessions | `kind: other`, a title such as `Start subagent <name>`, `rawInput = {agentThreadId, agentPath, activityKind}`, `_meta.jetbrains.air.subagent: true`. | The same, without `_meta`. |

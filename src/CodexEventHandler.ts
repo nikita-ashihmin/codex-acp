@@ -555,6 +555,8 @@ export class CodexEventHandler {
                 return this.renderFacts(this.commands.outputDelta(notification.params.itemId, notification.params.delta));
             case "item/mcpToolCall/progress":
                 this.completeRetryIncidentOnTurnProgress();
+                // AIR does not show MCP progress.
+                if (this.renderer.capabilities.airClient) return null;
                 return this.renderer.render(McpToolReporter.progress(
                     notification.params.itemId,
                     notification.params.message,

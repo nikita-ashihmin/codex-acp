@@ -33,9 +33,12 @@ export class McpToolReporter {
         };
     }
 
-    /** MCP progress text, unchanged, so that the client can append the chunks. */
+    /**
+     * MCP progress text, trimmed, for a client that is not AIR.
+     * AIR does not show MCP progress, so the report is empty for AIR and the adapter sends nothing.
+     */
     static progress(itemId: string, message: string): ToolFacts {
-        return {toolCallId: itemId, report: "update", mcpProgress: message};
+        return {toolCallId: itemId, report: "update", standard: {mcpProgress: message.trim()}};
     }
 }
 

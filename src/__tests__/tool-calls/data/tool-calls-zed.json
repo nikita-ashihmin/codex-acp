@@ -106,7 +106,7 @@
       "toolCallId": "mcp",
       "_meta": {
         "mcp_output_delta": {
-          "data": "line 1\n"
+          "data": "line 1"
         }
       }
     },

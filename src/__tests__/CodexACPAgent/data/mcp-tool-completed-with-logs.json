@@ -34,23 +34,6 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "call-id",
-        "_meta": {
-          "mcp_output_delta": {
-            "data": "File /Users/aleksandr.slapoguzov/Projects/ultimate/.ai/local.md doesn't exist or can't be opened"
-          }
-        }
-      }
-    }
-  ]
-}
-{
-  "method": "sessionUpdate",
-  "args": [
-    {
-      "sessionId": "test-session-id",
-      "update": {
-        "sessionUpdate": "tool_call_update",
-        "toolCallId": "call-id",
         "status": "failed",
         "rawOutput": {
           "result": null,

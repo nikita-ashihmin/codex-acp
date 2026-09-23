@@ -37,8 +37,6 @@ export type ToolFacts = {
     terminalInput?: string;
     /** The command ended. */
     terminalExit?: {exitCode: number | null};
-    /** MCP progress text to append. */
-    mcpProgress?: string;
     mcp?: boolean;
     subagent?: boolean;
     contextCompaction?: ContextCompactionMetadata;
@@ -69,6 +67,8 @@ export type StandardToolCallFields = {
     commandOutput?: {data: string; terminal: boolean};
     /** The end of a command: the output in `rawOutput.formatted_output`, the terminal output, and the exit. */
     commandEnd?: CommandEnd;
+    /** MCP progress text to append in `_meta.mcp_output_delta`. AIR gets no MCP progress. */
+    mcpProgress?: string;
 };
 
 export type CommandEnd = {
@@ -88,6 +88,6 @@ export type CommandEnd = {
  * A reporter sets only `toolCallId`, `title`, `input`, and the facts that the client does not have yet.
  */
 export type PermissionToolFacts = Omit<ToolFacts, "report" | "terminal" | "terminalOutput" | "terminalInput"
-    | "terminalExit" | "mcpProgress" | "standard"> & {
-    standard?: Omit<StandardToolCallFields, "commandOutput" | "commandEnd">;
+    | "terminalExit" | "standard"> & {
+    standard?: Omit<StandardToolCallFields, "commandOutput" | "commandEnd" | "mcpProgress">;
 };

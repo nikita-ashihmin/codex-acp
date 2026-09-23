@@ -293,10 +293,11 @@ describe("Zed", () => {
         expect(updates("zed", "read-search-list", "read-1").map(update => update["_meta"])).toEqual([undefined, undefined]);
     });
 
-    it("keeps is_mcp_tool_call and mcp_output_delta", () => {
+    it("keeps is_mcp_tool_call and the trimmed progress text in mcp_output_delta", () => {
         const mcp = updates("zed", "mcp-tool", "mcp-1");
         expect(mcp[0]!["_meta"]).toEqual({is_mcp_tool_call: true});
-        expect(mcp[1]!["_meta"]).toEqual({mcp_output_delta: {data: "  fetching page 1\n"}});
+        expect(mcp[1]!["_meta"]).toEqual({mcp_output_delta: {data: "fetching page 1"}});
+        expect(mcp[2]!["_meta"]).toEqual({mcp_output_delta: {data: "fetching page 2"}});
     });
 });
 
@@ -378,6 +379,12 @@ describe("AIR", () => {
         });
         expect(air(updates("air", "context-compaction", "compact-1")[0]!["_meta"]))
             .toEqual({version: 1, contextCompaction: {version: 1}});
+    });
+
+    it("gets no MCP progress", () => {
+        const text = JSON.stringify(recording("air", "mcp-tool"));
+        expect(text).not.toContain("mcp_output_delta");
+        expect(text).not.toContain("fetching page");
     });
 
     it("gets the MCP result and error in rawOutput = {result, error}, and no copy in content", () => {

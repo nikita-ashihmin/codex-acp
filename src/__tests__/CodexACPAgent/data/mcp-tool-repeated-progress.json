@@ -31,40 +31,6 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "call-id",
-        "_meta": {
-          "mcp_output_delta": {
-            "data": "Polling for status"
-          }
-        }
-      }
-    }
-  ]
-}
-{
-  "method": "sessionUpdate",
-  "args": [
-    {
-      "sessionId": "test-session-id",
-      "update": {
-        "sessionUpdate": "tool_call_update",
-        "toolCallId": "call-id",
-        "_meta": {
-          "mcp_output_delta": {
-            "data": "Polling for status"
-          }
-        }
-      }
-    }
-  ]
-}
-{
-  "method": "sessionUpdate",
-  "args": [
-    {
-      "sessionId": "test-session-id",
-      "update": {
-        "sessionUpdate": "tool_call_update",
-        "toolCallId": "call-id",
         "status": "failed",
         "rawOutput": {
           "result": null,

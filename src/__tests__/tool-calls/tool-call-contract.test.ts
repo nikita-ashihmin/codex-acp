@@ -150,9 +150,11 @@ describe("ACP tool call contract", () => {
             .toEqual([{type: "content", content: {type: "text", text: "Pick a value"}}]);
     });
 
-    it("sends MCP progress text unchanged", () => {
-        const update = new AcpToolCallRenderer(AIR).render(McpToolReporter.progress("mcp", "  line 1\n"));
-        expect(update._meta).toEqual({mcp_output_delta: {data: "  line 1\n"}});
+    it("sends trimmed MCP progress text to a client that is not AIR, and none to AIR", () => {
+        const zed = new AcpToolCallRenderer(ZED).render(McpToolReporter.progress("mcp", "  line 1\n"));
+        expect(zed._meta).toEqual({mcp_output_delta: {data: "line 1"}});
+        const air = new AcpToolCallRenderer(AIR).render(McpToolReporter.progress("mcp", "  line 1\n"));
+        expect(air).toEqual({sessionUpdate: "tool_call_update", toolCallId: "mcp"});
     });
 });
 

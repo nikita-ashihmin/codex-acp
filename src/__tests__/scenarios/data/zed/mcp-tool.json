@@ -198,7 +198,7 @@
         "toolCallId": "mcp-1",
         "_meta": {
           "mcp_output_delta": {
-            "data": "  fetching page 1\n"
+            "data": "fetching page 1"
           }
         }
       }

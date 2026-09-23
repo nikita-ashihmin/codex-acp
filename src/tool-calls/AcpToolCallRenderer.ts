@@ -109,6 +109,7 @@ export class AcpToolCallRenderer {
             ...terminalInfo(facts),
             ...(output === undefined ? {} : this.outputChunk(terminalId, output.data, output.terminal)),
             ...(end === undefined ? {} : this.commandEndMeta(terminalId, end)),
+            ...(facts.standard?.mcpProgress === undefined ? {} : {mcp_output_delta: {data: facts.standard.mcpProgress}}),
             ...mcpMeta(facts),
         };
     }
@@ -147,16 +148,13 @@ function terminalExit(terminalId: string, exitCode: number | null): Record<strin
 }
 
 function mcpMeta(facts: ToolFacts): Record<string, unknown> {
-    return {
-        ...(facts.mcpProgress === undefined ? {} : {mcp_output_delta: {data: facts.mcpProgress}}),
-        ...(facts.mcp ? {is_mcp_tool_call: true} : {}),
-    };
+    return facts.mcp ? {is_mcp_tool_call: true} : {};
 }
 
 /** Applies the fields of a client that is not AIR. `null` removes a field. */
 function applyStandardFields(
     rendered: Record<string, unknown>,
-    standard: Omit<StandardToolCallFields, "commandOutput" | "commandEnd"> | undefined,
+    standard: Omit<StandardToolCallFields, "commandOutput" | "commandEnd" | "mcpProgress"> | undefined,
 ): void {
     if (standard === undefined) return;
     const locations = standard.locations === undefined || standard.locations === null

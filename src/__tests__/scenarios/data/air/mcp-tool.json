@@ -290,38 +290,6 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "mcp-1",
-        "_meta": {
-          "mcp_output_delta": {
-            "data": "  fetching page 1\n"
-          }
-        }
-      }
-    }
-  },
-  {
-    "direction": "notify",
-    "method": "session/update",
-    "params": {
-      "sessionId": "session-1",
-      "update": {
-        "sessionUpdate": "tool_call_update",
-        "toolCallId": "mcp-1",
-        "_meta": {
-          "mcp_output_delta": {
-            "data": "fetching page 2"
-          }
-        }
-      }
-    }
-  },
-  {
-    "direction": "notify",
-    "method": "session/update",
-    "params": {
-      "sessionId": "session-1",
-      "update": {
-        "sessionUpdate": "tool_call_update",
-        "toolCallId": "mcp-1",
         "status": "completed",
         "rawOutput": {
           "result": {
