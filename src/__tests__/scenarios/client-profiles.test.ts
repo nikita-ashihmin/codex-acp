@@ -210,6 +210,94 @@ describe("every client", () => {
     }
 });
 
+/** The session and the update kind of each session update, with the tool call id when there is one. */
+function timeline(profile: ProfileName, name: string): string[] {
+    return recording(profile, name)
+        .filter(message => message.method === "session/update")
+        .map(message => message.params as {sessionId: string; update: Update})
+        .filter(({update}) => update["sessionUpdate"] !== "session_info_update")
+        .map(({sessionId, update}) => [sessionId, update["sessionUpdate"], update["toolCallId"] ?? update["subagentSessionId"]]
+            .filter(part => part !== undefined).join(" "));
+}
+
+const SUBAGENT_SCENARIOS = ["native-subagent-session", "nested-subagent-session", "late-subagent-update", "collab-controls"];
+
+describe("subagents", () => {
+    for (const profile of ["plain", "zed"] as const) {
+        it(`${profile}: gets the legacy tool calls on the root session and no child session`, () => {
+            for (const name of SUBAGENT_SCENARIOS) {
+                const sessions = new Set(recording(profile, name)
+                    .filter(message => message.method === "session/update")
+                    .map(message => (message.params as {sessionId: string}).sessionId));
+                expect(sessions).toEqual(new Set(["session-1"]));
+                expect(timeline(profile, name).some(entry => entry.includes("subagent_"))).toBe(false);
+            }
+            expect(timeline(profile, "collab-controls")).toEqual([
+                "session-1 tool_call spawn-1",
+                "session-1 tool_call act-1",
+                "session-1 tool_call wait-1",
+                "session-1 tool_call_update wait-1",
+                "session-1 tool_call send-1",
+                "session-1 tool_call_update send-1",
+                "session-1 tool_call resume-1",
+                "session-1 tool_call_update resume-1",
+                "session-1 tool_call close-1",
+                "session-1 tool_call_update close-1",
+                "session-1 tool_call_update spawn-1",
+            ]);
+        });
+    }
+
+    it("air: gets the child session before the child output, and the child state on the parent", () => {
+        expect(timeline("air", "native-subagent-session")).toEqual([
+            "session-1 subagent_spawned child-thread",
+            "child-thread tool_call child-cmd",
+            "child-thread tool_call_update child-cmd",
+            "child-thread tool_call_update child-cmd",
+            "child-thread tool_call child-mcp",
+            "child-thread tool_call_update child-mcp",
+            "child-thread agent_message_chunk",
+            "session-1 subagent_state_update child-thread",
+        ]);
+    });
+
+    it("air: gets a nested child on its immediate parent", () => {
+        expect(timeline("air", "nested-subagent-session")).toEqual([
+            "session-1 subagent_spawned child-thread",
+            "child-thread subagent_spawned grandchild-thread",
+            "grandchild-thread tool_call grandchild-cmd",
+            "grandchild-thread tool_call_update grandchild-cmd",
+            "grandchild-thread agent_message_chunk",
+            "child-thread subagent_state_update grandchild-thread",
+            "session-1 subagent_state_update child-thread",
+        ]);
+    });
+
+    it("air: gets no child update after the child ends", () => {
+        expect(timeline("air", "late-subagent-update")).toEqual([
+            "session-1 subagent_spawned child-thread",
+            "child-thread tool_call child-cmd",
+            "session-1 subagent_state_update child-thread",
+        ]);
+    });
+
+    it("air: gets wait, sendInput, resumeAgent and closeAgent as tool calls without _meta.jetbrains.air.subagent", () => {
+        const controls = updates("air", "collab-controls")
+            .filter(update => ["wait-1", "send-1", "resume-1", "close-1"].includes(update["toolCallId"]));
+        expect(controls.map(update => [update["sessionUpdate"], update["title"]])).toEqual([
+            ["tool_call", "wait"],
+            ["tool_call_update", undefined],
+            ["tool_call", "sendInput"],
+            ["tool_call_update", undefined],
+            ["tool_call", "resumeAgent"],
+            ["tool_call_update", undefined],
+            ["tool_call", "closeAgent"],
+            ["tool_call_update", undefined],
+        ]);
+        expect(controls.every(update => update["_meta"] === undefined)).toBe(true);
+    });
+});
+
 describe("plain ACP client", () => {
     it("gets terminal_output_delta chunks, the stdin on its own line, and the output in rawOutput at the end", () => {
         expect(updates("plain", "command-output-stdin", "cmd-1")).toEqual([

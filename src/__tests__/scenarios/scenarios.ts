@@ -117,6 +117,34 @@ function turnCompleted(threadId = SESSION_ID, turnId = TURN_ID): Record<string, 
     };
 }
 
+const NESTED_CHILD_THREAD_ID = "grandchild-thread";
+
+/** A Codex collaboration tool call of `senderThreadId` that addresses `receiverThreadId`. */
+function collab(
+    id: string,
+    tool: string,
+    status: "inProgress" | "completed",
+    agentState: "running" | "completed",
+    senderThreadId = SESSION_ID,
+    receiverThreadId = CHILD_THREAD_ID,
+    prompt: string | null = "Find the weather in Paris.",
+): Record<string, unknown> {
+    return {
+        type: "collabAgentToolCall", id, tool, status, senderThreadId, receiverThreadIds: [receiverThreadId], prompt,
+        model: null, reasoningEffort: null, agentsStates: {[receiverThreadId]: {status: agentState, message: null}},
+    };
+}
+
+/** The activity item that announces the session of a spawned subagent. */
+function spawnActivity(id: string, agentThreadId: string, agentPath: string, threadId = SESSION_ID): ScenarioStep {
+    return started({type: "subAgentActivity", id, kind: "started", agentThreadId, agentPath}, threadId);
+}
+
+/** An event of a subagent thread. */
+function childNotify(threadId: string, method: string, params: Record<string, unknown>): ScenarioStep {
+    return {notify: {method, params: {threadId, turnId: `${threadId}-turn`, ...params}}};
+}
+
 export const SCENARIOS: Scenario[] = [
     {
         name: "command-output-stdin",
@@ -524,6 +552,82 @@ export const SCENARIOS: Scenario[] = [
                 type: "agentMessage", id: "msg-1", text: "Hello world", phase: "final_answer", memoryCitation: null,
                 delivery: null, questions: null,
             }),
+        ],
+    },
+    {
+        name: "native-subagent-session",
+        steps: [
+            started(collab("spawn-1", "spawnAgent", "inProgress", "running")),
+            spawnActivity("act-1", CHILD_THREAD_ID, "/root/weather"),
+            started(command({id: "child-cmd", command: "curl wttr.in", commandActions: []}), CHILD_THREAD_ID),
+            childNotify(CHILD_THREAD_ID, "item/commandExecution/outputDelta", {itemId: "child-cmd", delta: "Sunny\n"}),
+            completed(command({
+                id: "child-cmd", command: "curl wttr.in", commandActions: [], status: "completed",
+                aggregatedOutput: "Sunny\n", exitCode: 0, durationMs: 3,
+            }), CHILD_THREAD_ID),
+            started(mcpCall({id: "child-mcp"}), CHILD_THREAD_ID),
+            completed(mcpCall({
+                id: "child-mcp", status: "completed", durationMs: 2,
+                result: {content: [{type: "text", text: "1 hit"}], structuredContent: null, _meta: null},
+            }), CHILD_THREAD_ID),
+            childNotify(CHILD_THREAD_ID, "item/agentMessage/delta", {itemId: "child-msg", delta: "Sunny in Paris"}),
+            {notify: turnCompleted(CHILD_THREAD_ID, `${CHILD_THREAD_ID}-turn`)},
+            completed(collab("spawn-1", "spawnAgent", "completed", "completed")),
+        ],
+    },
+    {
+        name: "nested-subagent-session",
+        steps: [
+            started(collab("spawn-1", "spawnAgent", "inProgress", "running")),
+            spawnActivity("act-1", CHILD_THREAD_ID, "/root/weather"),
+            started(collab(
+                "spawn-2", "spawnAgent", "inProgress", "running", CHILD_THREAD_ID, NESTED_CHILD_THREAD_ID, "Check Lyon.",
+            ), CHILD_THREAD_ID),
+            spawnActivity("act-2", NESTED_CHILD_THREAD_ID, "/root/weather/lyon", CHILD_THREAD_ID),
+            started(command({id: "grandchild-cmd", command: "curl wttr.in/Lyon", commandActions: []}), NESTED_CHILD_THREAD_ID),
+            completed(command({
+                id: "grandchild-cmd", command: "curl wttr.in/Lyon", commandActions: [], status: "completed",
+                aggregatedOutput: "Rain\n", exitCode: 0, durationMs: 3,
+            }), NESTED_CHILD_THREAD_ID),
+            childNotify(NESTED_CHILD_THREAD_ID, "item/agentMessage/delta", {itemId: "grandchild-msg", delta: "Rain in Lyon"}),
+            {notify: turnCompleted(NESTED_CHILD_THREAD_ID, `${NESTED_CHILD_THREAD_ID}-turn`)},
+            completed(collab(
+                "spawn-2", "spawnAgent", "completed", "completed", CHILD_THREAD_ID, NESTED_CHILD_THREAD_ID, "Check Lyon.",
+            ), CHILD_THREAD_ID),
+            {notify: turnCompleted(CHILD_THREAD_ID, `${CHILD_THREAD_ID}-turn`)},
+            completed(collab("spawn-1", "spawnAgent", "completed", "completed")),
+        ],
+    },
+    {
+        name: "late-subagent-update",
+        steps: [
+            started(collab("spawn-1", "spawnAgent", "inProgress", "running")),
+            spawnActivity("act-1", CHILD_THREAD_ID, "/root/weather"),
+            started(command({id: "child-cmd", command: "curl wttr.in", commandActions: []}), CHILD_THREAD_ID),
+            {notify: turnCompleted(CHILD_THREAD_ID, `${CHILD_THREAD_ID}-turn`)},
+            completed(collab("spawn-1", "spawnAgent", "completed", "completed")),
+            childNotify(CHILD_THREAD_ID, "item/commandExecution/outputDelta", {itemId: "child-cmd", delta: "Late\n"}),
+            completed(command({
+                id: "child-cmd", command: "curl wttr.in", commandActions: [], status: "completed",
+                aggregatedOutput: "Late\n", exitCode: 0, durationMs: 3,
+            }), CHILD_THREAD_ID),
+            childNotify(CHILD_THREAD_ID, "item/agentMessage/delta", {itemId: "child-msg", delta: "Too late"}),
+        ],
+    },
+    {
+        name: "collab-controls",
+        steps: [
+            started(collab("spawn-1", "spawnAgent", "inProgress", "running")),
+            spawnActivity("act-1", CHILD_THREAD_ID, "/root/weather"),
+            started(collab("wait-1", "wait", "inProgress", "running", SESSION_ID, CHILD_THREAD_ID, null)),
+            completed(collab("wait-1", "wait", "completed", "running", SESSION_ID, CHILD_THREAD_ID, null)),
+            started(collab("send-1", "sendInput", "inProgress", "running", SESSION_ID, CHILD_THREAD_ID, "Use Celsius.")),
+            completed(collab("send-1", "sendInput", "completed", "running", SESSION_ID, CHILD_THREAD_ID, "Use Celsius.")),
+            started(collab("resume-1", "resumeAgent", "inProgress", "running", SESSION_ID, CHILD_THREAD_ID, null)),
+            completed(collab("resume-1", "resumeAgent", "completed", "running", SESSION_ID, CHILD_THREAD_ID, null)),
+            started(collab("close-1", "closeAgent", "inProgress", "running", SESSION_ID, CHILD_THREAD_ID, null)),
+            completed(collab("close-1", "closeAgent", "completed", "completed", SESSION_ID, CHILD_THREAD_ID, null)),
+            completed(collab("spawn-1", "spawnAgent", "completed", "completed")),
         ],
     },
     {
