@@ -127,11 +127,13 @@ export class AcpToolCallRenderer {
 
     /**
      * The end of a command for a client that is not AIR.
-     * The output that did not stream goes to the output channel, when the client has one for this command.
+     * The output that did not stream goes to the output channel of a command that shows a terminal.
+     * A live command without a terminal sends it there only when the client declares `terminal_output_delta`.
      * A replayed command without a terminal has only `rawOutput`.
      */
     private commandEndMeta(terminalId: string, end: CommandEnd): Record<string, unknown> {
-        const sendOutput = end.output.length > 0 && !end.streamed && (end.terminal || !end.replay);
+        const sendOutput = end.output.length > 0 && !end.streamed
+            && (end.terminal || (!end.replay && this.capabilities.terminalOutputDelta));
         return {
             ...(sendOutput ? this.outputChunk(terminalId, end.output, end.terminal) : {}),
             ...(end.terminal ? terminalExit(terminalId, end.exitCode) : {}),

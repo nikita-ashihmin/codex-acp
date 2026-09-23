@@ -201,6 +201,23 @@
     "params": {
       "sessionId": "session-1",
       "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "bg-1",
+        "_meta": {
+          "terminal_output_delta": {
+            "data": "listening on 3000\n",
+            "terminal_id": "bg-1"
+          }
+        }
+      }
+    }
+  },
+  {
+    "direction": "notify",
+    "method": "session/update",
+    "params": {
+      "sessionId": "session-1",
+      "update": {
         "sessionUpdate": "session_info_update",
         "title": "Go"
       }

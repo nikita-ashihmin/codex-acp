@@ -202,6 +202,23 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "cmd-3",
+        "_meta": {
+          "terminal_output_delta": {
+            "data": "cat: missing.txt: No such file\n",
+            "terminal_id": "cmd-3"
+          }
+        }
+      }
+    }
+  },
+  {
+    "direction": "notify",
+    "method": "session/update",
+    "params": {
+      "sessionId": "session-1",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "cmd-3",
         "status": "failed",
         "rawOutput": {
           "formatted_output": "cat: missing.txt: No such file\n",

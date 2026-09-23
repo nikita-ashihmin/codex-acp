@@ -1,3 +1,4 @@
+import type * as acp from "@agentclientprotocol/sdk";
 import {beforeAll, describe, expect, it} from "vitest";
 import {schemaErrors} from "./acp-schema";
 import {AIR_CAPABILITY_NAMES, normalize, PROFILES, type ProfileName, type RecordedMessage, runScenario} from "./scenario-harness";
@@ -118,9 +119,9 @@ describe("clients that are not AIR", () => {
             expect(found).toEqual([]);
         });
 
-        it(`${profile}: gets no terminal_output_delta and no terminal_input, because it declares neither`, () => {
+        it(`${profile}: gets no terminal_input, because the stdin comes as an output chunk`, () => {
             const found = SCENARIOS.flatMap(each => metaObjects(recording(profile, each.name))
-                .filter(({meta}) => "terminal_output_delta" in meta || "terminal_input" in meta)
+                .filter(({meta}) => "terminal_input" in meta)
                 .map(() => each.name));
             expect(found).toEqual([]);
         });
@@ -210,9 +211,24 @@ describe("every client", () => {
 });
 
 describe("plain ACP client", () => {
-    it("declares no terminal channel, so it gets no output chunks and sees the output when the command ends", () => {
+    it("gets terminal_output_delta chunks, the stdin on its own line, and the output in rawOutput at the end", () => {
         expect(updates("plain", "command-output-stdin", "cmd-1")).toEqual([
             expect.objectContaining({sessionUpdate: "tool_call", content: [{type: "terminal", terminalId: "cmd-1"}]}),
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output_delta: {data: "Running tests\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output_delta: {data: "\ny\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output_delta: {data: "1 passed\n", terminal_id: "cmd-1"}},
+            },
             {
                 sessionUpdate: "tool_call_update",
                 toolCallId: "cmd-1",
@@ -223,12 +239,83 @@ describe("plain ACP client", () => {
         ]);
     });
 
-    it("sees the output of a replayed command", () => {
+    it("gets the output of a command that did not stream in one terminal_output_delta chunk at the end", () => {
+        expect(updates("plain", "command-without-streamed-output", "cmd-2").at(-1)!["_meta"]).toEqual({
+            terminal_output_delta: {data: "a.txt\nb.txt\n", terminal_id: "cmd-2"},
+            terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-2"},
+        });
+    });
+
+    it("gets a replayed command with terminal_output_delta, terminal_exit and rawOutput", () => {
         expect(updates("plain", "history-replay", "h-cmd").at(-1)).toEqual({
             sessionUpdate: "tool_call_update",
             toolCallId: "h-cmd",
             rawOutput: {formatted_output: "1 passed\n", exit_code: 0},
-            _meta: {terminal_exit: {exit_code: 0, signal: null, terminal_id: "h-cmd"}},
+            _meta: {
+                terminal_output_delta: {data: "1 passed\n", terminal_id: "h-cmd"},
+                terminal_exit: {exit_code: 0, signal: null, terminal_id: "h-cmd"},
+            },
+        });
+    });
+});
+
+describe("a client that declares terminal_output_delta and is not AIR", () => {
+    const capabilities: acp.ClientCapabilities = {_meta: {terminal_output_delta: true}};
+
+    async function commandUpdates(name: string, toolCallId: string): Promise<Update[]> {
+        return normalize(await runScenario(scenario(name), capabilities))
+            .filter(message => message.method === "session/update")
+            .map(message => (message.params as {update: Update}).update)
+            .filter(update => update["toolCallId"] === toolCallId);
+    }
+
+    it("gets terminal_output_delta chunks, the stdin on its own line, and no rawOutput at the end", async () => {
+        expect((await commandUpdates("command-output-stdin", "cmd-1")).slice(1)).toEqual([
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output_delta: {data: "Running tests\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output_delta: {data: "\ny\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                _meta: {terminal_output_delta: {data: "1 passed\n", terminal_id: "cmd-1"}},
+            },
+            {
+                sessionUpdate: "tool_call_update",
+                toolCallId: "cmd-1",
+                status: "completed",
+                _meta: {terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-1"}},
+            },
+        ]);
+    });
+
+    it("gets the output of a command that did not stream in one terminal_output_delta chunk at the end", async () => {
+        expect((await commandUpdates("command-without-streamed-output", "cmd-2")).at(-1)).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "cmd-2",
+            status: "completed",
+            _meta: {
+                terminal_output_delta: {data: "a.txt\nb.txt\n", terminal_id: "cmd-2"},
+                terminal_exit: {exit_code: 0, signal: null, terminal_id: "cmd-2"},
+            },
+        });
+    });
+
+    it("gets a replayed command with terminal_output_delta, terminal_exit and rawOutput", async () => {
+        expect((await commandUpdates("history-replay", "h-cmd")).at(-1)).toEqual({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "h-cmd",
+            rawOutput: {formatted_output: "1 passed\n", exit_code: 0},
+            _meta: {
+                terminal_output_delta: {data: "1 passed\n", terminal_id: "h-cmd"},
+                terminal_exit: {exit_code: 0, signal: null, terminal_id: "h-cmd"},
+            },
         });
     });
 });
@@ -303,8 +390,12 @@ describe("Zed", () => {
         });
     });
 
-    it("gets no terminal chunks for a read command, because it shows no terminal", () => {
-        expect(updates("zed", "read-search-list", "read-1").map(update => update["_meta"])).toEqual([undefined, undefined]);
+    it("gets terminal_output_delta chunks for a read command, because it shows no terminal", () => {
+        expect(updates("zed", "read-search-list", "read-1").map(update => update["_meta"])).toEqual([
+            undefined,
+            {terminal_output_delta: {data: "export const a = 1;\n", terminal_id: "read-1"}},
+            undefined,
+        ]);
     });
 
     it("keeps is_mcp_tool_call and the trimmed progress text in mcp_output_delta", () => {

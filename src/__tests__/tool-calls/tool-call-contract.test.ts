@@ -167,11 +167,15 @@ describe("ClientCapabilities", () => {
             .toEqual({rawInputRendering: false, planContentDelta: false, diffPatch: false});
     });
 
-    it("selects the terminal channel that the client declares", () => {
+    it("selects the terminal channel that the client declares, and terminal_output_delta for any other client", () => {
         expect(AIR.terminalOutputKey(true)).toBe("terminal_output_delta");
         expect(AIR.terminalOutputKey(false)).toBe("terminal_output_delta");
         expect(ZED.terminalOutputKey(true)).toBe("terminal_output");
-        expect(ZED.terminalOutputKey(false)).toBeNull();
-        expect(ClientCapabilities.from(null).terminalOutputKey(true)).toBeNull();
+        expect(ZED.terminalOutputKey(false)).toBe("terminal_output_delta");
+        expect(ClientCapabilities.from(null).terminalOutputKey(true)).toBe("terminal_output_delta");
+        expect(ClientCapabilities.from(null).terminalOutputKey(false)).toBe("terminal_output_delta");
+        expect(ClientCapabilities.from({_meta: {terminal_output_delta: true}}).terminalOutputKey(false))
+            .toBe("terminal_output_delta");
+        expect(ClientCapabilities.from({_meta: {jetbrains: {air: {version: 1}}}}).terminalOutputKey(true)).toBeNull();
     });
 });

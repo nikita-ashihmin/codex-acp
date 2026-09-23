@@ -202,6 +202,57 @@
       "update": {
         "sessionUpdate": "tool_call_update",
         "toolCallId": "cmd-1",
+        "_meta": {
+          "terminal_output_delta": {
+            "data": "Running tests\n",
+            "terminal_id": "cmd-1"
+          }
+        }
+      }
+    }
+  },
+  {
+    "direction": "notify",
+    "method": "session/update",
+    "params": {
+      "sessionId": "session-1",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "cmd-1",
+        "_meta": {
+          "terminal_output_delta": {
+            "data": "\ny\n",
+            "terminal_id": "cmd-1"
+          }
+        }
+      }
+    }
+  },
+  {
+    "direction": "notify",
+    "method": "session/update",
+    "params": {
+      "sessionId": "session-1",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "cmd-1",
+        "_meta": {
+          "terminal_output_delta": {
+            "data": "1 passed\n",
+            "terminal_id": "cmd-1"
+          }
+        }
+      }
+    }
+  },
+  {
+    "direction": "notify",
+    "method": "session/update",
+    "params": {
+      "sessionId": "session-1",
+      "update": {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": "cmd-1",
         "status": "completed",
         "rawOutput": {
           "formatted_output": "Running tests\n1 passed\n",
