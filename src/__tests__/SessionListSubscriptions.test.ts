@@ -160,9 +160,9 @@ describe("SessionListSubscriptions", () => {
         codex.put(thread("other", {cwd: "/elsewhere"}));
 
         const subscriptionId = await subscriptions.subscribe("/repo");
-        // Only the marks: one small thread/list without cwd per archive state.
-        expect(codex.threadList.mock.calls.map(call => call[0])).toEqual([false, true].map(archived =>
-            expect.objectContaining({archived, limit: 20, sortKey: "updated_at"})));
+        // Only the mark: one small thread/list of the unarchived threads, without cwd.
+        expect(codex.threadList.mock.calls.map(call => call[0])).toEqual([
+            expect.objectContaining({archived: false, limit: 20, sortKey: "updated_at"})]);
         listener().stateChanged();
         await vi.advanceTimersByTimeAsync(2_000);
         expect(sent).toEqual([]);
@@ -242,15 +242,15 @@ describe("SessionListSubscriptions", () => {
         await vi.advanceTimersByTimeAsync(1);
 
         expect(sent).toEqual([{subscriptionId, sessions: [expect.objectContaining({sessionId: "b", title: "Renamed by a turn"})], removed: []}]);
-        expect(codex.threadList.mock.calls.map(call => call[0])).toEqual([false, true].map(archived => ({
+        expect(codex.threadList.mock.calls.map(call => call[0])).toEqual([{
             cursor: null,
             limit: 20,
             sortKey: "updated_at",
-            archived,
+            archived: false,
             sourceKinds: [],
             modelProviders: [],
             useStateDbOnly: true,
-        })));
+        }]);
         subscriptions.dispose();
     });
 
@@ -292,7 +292,7 @@ describe("SessionListSubscriptions", () => {
             await vi.advanceTimersByTimeAsync(100);
         }
 
-        expect(codex.scans().length - scansBefore).toBe(2);
+        expect(codex.scans().length - scansBefore).toBe(1);
         subscriptions.dispose();
     });
 
@@ -487,29 +487,25 @@ describe("SessionListSubscriptions", () => {
         subscriptions.dispose();
     });
 
-    it("tries a failed scan again only after both of its reads settled, a second later", async () => {
+    it("tries a failed scan again a second later, until one succeeds", async () => {
         const {codex, subscriptions, listener} = setup();
         await subscriptions.subscribe("/repo");
         const list = codex.threadList.getMockImplementation()!;
-        let release: () => void = () => {};
-        codex.threadList.mockImplementation(async (params) => {
-            if (params.archived) {
-                await new Promise<void>(resolve => {
-                    release = resolve;
-                });
-                return await list(params);
-            }
+        codex.threadList.mockImplementation(async () => {
             throw new Error("busy");
         });
         const before = codex.scans().length;
         listener().stateChanged();
-        await vi.advanceTimersByTimeAsync(3_000);
+        await vi.advanceTimersByTimeAsync(timings.quietMs);
+        expect(codex.scans().length - before).toBe(1);
+        await vi.advanceTimersByTimeAsync(1_000);
         expect(codex.scans().length - before).toBe(2);
 
         codex.threadList.mockImplementation(list);
-        release();
         await vi.advanceTimersByTimeAsync(1_000);
-        expect(codex.scans().length - before).toBe(4);
+        expect(codex.scans().length - before).toBe(3);
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(codex.scans().length - before).toBe(3);
         subscriptions.dispose();
     });
 
@@ -533,14 +529,14 @@ describe("SessionListSubscriptions", () => {
         subscriptions.dispose();
     });
 
-    it("reads one page per archive state for its first marks, however many threads are new", async () => {
+    it("reads one page for its first mark, however many threads are new", async () => {
         const {codex, subscriptions} = setup();
         const now = Math.floor(Date.now() / 1000);
         for (let index = 0; index < 1_000; index++) codex.put(thread(`t-${index}`, {updatedAt: now, cwd: "/elsewhere"}));
 
         await subscriptions.subscribe("/repo");
 
-        expect(codex.threadList).toHaveBeenCalledTimes(2);
+        expect(codex.threadList).toHaveBeenCalledTimes(1);
         subscriptions.dispose();
     });
 
@@ -715,7 +711,7 @@ describe("SessionListSubscriptions", () => {
         listener().stateChanged();
         await vi.advanceTimersByTimeAsync(timings.maxWaitMs);
 
-        expect(codex.scans()).toHaveLength(2);
+        expect(codex.scans()).toHaveLength(1);
         expect(sent.map(changes => changes.subscriptionId).sort()).toEqual([first, second].sort());
         expect(sent.every(changes => ids(changes.sessions).join() === "a")).toBe(true);
 
@@ -736,10 +732,26 @@ describe("SessionListSubscriptions", () => {
         codex.put(thread("worktree", {cwd: "/repo-wt", updatedAt: 2_000}));
         codex.put(thread("archived", {updatedAt: 2_000}), true);
         codex.put(thread("other", {cwd: "/other", updatedAt: 2_000}));
+        listener().archiveMoved("archived");
         listener().stateChanged();
         await vi.advanceTimersByTimeAsync(timings.maxWaitMs);
 
         expect(sent.flatMap(changes => ids(changes.sessions)).sort()).toEqual(["archived", "worktree"]);
+        subscriptions.dispose();
+    });
+
+    it("lists no archived threads after a WAL write: an archived thread does not run", async () => {
+        const {codex, subscriptions, sent, listener} = setup();
+        codex.put(thread("archived", {updatedAt: 1_000}), true);
+        await subscriptions.subscribe("/repo");
+
+        codex.update("archived", {updatedAt: 2_000, name: "changed"});
+        codex.put(thread("a", {updatedAt: 2_000}));
+        listener().stateChanged();
+        await vi.advanceTimersByTimeAsync(timings.maxWaitMs);
+
+        expect(codex.threadList.mock.calls.map(call => call[0].archived)).toEqual([false, false]);
+        expect(sent.flatMap(changes => ids(changes.sessions))).toEqual(["a"]);
         subscriptions.dispose();
     });
 
@@ -802,7 +814,7 @@ describe("SessionListSubscriptions", () => {
         expect(codex.scans().length).toBe(scansBefore);
 
         await vi.advanceTimersByTimeAsync(timings.quietMs);
-        expect(codex.scans().length - scansBefore).toBe(2);
+        expect(codex.scans().length - scansBefore).toBe(1);
         subscriptions.dispose();
     });
 
@@ -1099,6 +1111,35 @@ describe("SessionListSubscriptions with a CODEX_HOME on disk", () => {
             sessionId: "a",
             _meta: {jetbrains: {air: expect.objectContaining({archived: true})}},
         })]);
+        subscriptions.dispose();
+    });
+
+    it("sends an archive and an unarchive by another process, and the rename of an archived thread", async () => {
+        const log = path.join(home, SESSION_NAME_LOG_FILE);
+        fs.writeFileSync(log, "");
+        const {codex, subscriptions, sent, listener} = setup(home);
+        codex.put(thread("a"));
+        codex.put(thread("b", {name: "before"}), true);
+        const subscriptionId = await subscriptions.subscribe("/repo");
+        const archivedOf = () => sent.flatMap(changes => changes.sessions)
+            .map(row => [row.sessionId, row.title, (row._meta as any).jetbrains.air.archived]);
+
+        // Neither moves updated_at: only the watch of archived_sessions and the name log see them.
+        codex.update("a", {}, true);
+        listener().archiveMoved("a");
+        codex.update("b", {name: "renamed elsewhere"});
+        fs.appendFileSync(log, `${JSON.stringify({id: "b", thread_name: "renamed elsewhere", updated_at: "x"})}\n`);
+        listener().stateChanged();
+        await vi.advanceTimersByTimeAsync(timings.maxWaitMs);
+        expect(archivedOf().sort()).toEqual([["a", "Prompt of a", true], ["b", "renamed elsewhere", true]]);
+
+        sent.length = 0;
+        codex.update("a", {}, false);
+        listener().archiveMoved("a");
+        await vi.advanceTimersByTimeAsync(timings.maxWaitMs + timings.minChangeIntervalMs);
+        expect(sent).toEqual([{subscriptionId, sessions: [expect.objectContaining({sessionId: "a"})], removed: []}]);
+        expect(archivedOf()).toEqual([["a", "Prompt of a", false]]);
+        expect(codex.threadList.mock.calls.every(call => call[0].archived === false)).toBe(true);
         subscriptions.dispose();
     });
 

@@ -1220,7 +1220,7 @@ still re-reads the list now and then, and a lost change shows up there.
   not have. Both arrays are always present, and one
   of them is not empty.
 - Subscribing reads no rows: the agent only notes the newest `updatedAt` of the threads, with one small
-  `thread/list` per archive state for the first subscription of the connection. After subscribing, the first
+  `thread/list` of the unarchived threads for the first subscription of the connection. After subscribing, the first
   change of each session is sent in full even if only `updatedAt` changed; later changes of it are compared with
   the row sent last. A thread whose `updatedAt` is no later than when the subscription started counts as
   unchanged for a scan, so its first change after subscribing within that same second can show only with its
@@ -1245,9 +1245,9 @@ How the agent sees changes:
   `<CODEX_HOME>/state_<n>.sqlite-wal`. The agent watches the WAL files and CODEX_HOME for WAL files that appear or
   go, and checks the WAL size and time every 30 s in case the file system drops an event. 150 ms after the last
   write, and at most 1 s after the first, it sends one `thread/list` without `cwd`, with `sortKey: "updated_at"`,
-  for unarchived threads and one for archived threads, and reads newest first until the threads are older than
-  the newest one it saw before. Threads of the same second as that one are read again. A scan reads at most
-  920 threads per archive state; one that stops there goes on where it stopped with the next scan, 150 ms later,
+  for unarchived threads, and reads newest first until the threads are older than the newest one it saw before.
+  Threads of the same second as that one are read again. It lists no archived threads: an archived thread does
+  not run. A scan reads at most 920 threads; one that stops there goes on where it stopped with the next scan, 150 ms later,
   and the newest one it saw counts only once it reached the old one; a scan from the top follows when a write came
   meanwhile.
 - A rename moves no `updated_at`. The agent watches `<CODEX_HOME>/session_index.jsonl`, to which any process
