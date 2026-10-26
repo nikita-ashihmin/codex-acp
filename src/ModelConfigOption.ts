@@ -111,14 +111,7 @@ export function createSubagentModelConfigOption(
     parentBaseModelId: string | null,
     model: string,
 ): SessionConfigOption {
-    // Without models the parent session has no model option, so there is nothing to match.
-    const parentOptions = availableModels.length > 0 ? modelOptions(availableModels, parentBaseModelId) : [];
-    // Codex can name a model by its `model` slug instead of its id.
-    const id = availableModels.find(candidate => candidate.id === model)?.id
-        ?? availableModels.find(candidate => candidate.model === model)?.id
-        ?? model;
-    const option = parentOptions.find(candidate => candidate.value === id)
-        ?? {value: model, name: model, description: null};
+    const option = subagentModelOption(availableModels, parentBaseModelId, model);
     return {
         id: MODEL_CONFIG_ID,
         name: "Model",
@@ -128,4 +121,33 @@ export function createSubagentModelConfigOption(
         currentValue: option.value,
         options: [option],
     };
+}
+
+/** The value of the model option of a subagent, without the name and the description. */
+export function subagentModelValue(availableModels: ReadonlyArray<Model>, model: string): string {
+    return findSubagentModel(availableModels, model)?.id ?? model;
+}
+
+/** The entry of the parent `model` option for the model, as `modelOptions` builds it. */
+function subagentModelOption(
+    availableModels: ReadonlyArray<Model>,
+    parentBaseModelId: string | null,
+    model: string,
+): ModelOption {
+    const known = findSubagentModel(availableModels, model);
+    if (known) {
+        return {value: known.id, name: formatModelDisplayName(known.displayName), description: known.description};
+    }
+    // The parent option also offers its current model when the list does not have it. Without models the parent
+    // session has no model option, so there is nothing to match.
+    if (availableModels.length > 0 && model === parentBaseModelId) {
+        return {value: model, name: formatModelDisplayName(model), description: null};
+    }
+    return {value: model, name: model, description: null};
+}
+
+/** Codex can name a model by its `model` slug instead of its id. */
+function findSubagentModel(availableModels: ReadonlyArray<Model>, model: string): Model | undefined {
+    return availableModels.find(candidate => candidate.id === model)
+        ?? availableModels.find(candidate => candidate.model === model);
 }

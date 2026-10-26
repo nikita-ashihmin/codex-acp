@@ -2,7 +2,7 @@ import type {ServerNotification} from "../app-server";
 import type {Model, ThreadItem} from "../app-server/v2";
 import type {ACPSessionConnection} from "../ACPSessionConnection";
 import {logger} from "../Logger";
-import {createSubagentModelConfigOption} from "../ModelConfigOption";
+import {createSubagentModelConfigOption, subagentModelValue} from "../ModelConfigOption";
 import {CollabAgentReporter} from "../tool-calls/reporters/CollabAgentReporter";
 import {SubagentActivityReporter} from "../tool-calls/reporters/SubagentActivityReporter";
 import type {ToolFacts} from "../tool-calls/ToolFacts";
@@ -146,13 +146,14 @@ export class CodexSubagentEventRouter {
             return false;
         }
         // Read a settings change before the buffering below, so that a pending child announces with its model.
-        // The buffered copy comes back after the announcement, and the router does not read it again.
+        // The buffered copy comes back after the announcement, and the router does not read it again. A settings
+        // change has no parent, so it counts as early only for a thread whose start this root already kept.
         if (notification.method === "thread/settings/updated" && !this.appliedSettings.delete(notification.params)) {
             const threadId = notification.params.threadId;
             await this.applyThreadModel(threadId, {
                 model: notification.params.threadSettings.model,
                 source: "settings",
-            }, this.spawnsInFlight.size > 0);
+            }, this.earlyThreadModels.has(threadId));
             if (this.pendingSpawns.has(threadId)) this.appliedSettings.add(notification.params);
         }
         if (notification.method === "turn/started") {
@@ -573,7 +574,7 @@ export class CodexSubagentEventRouter {
         const previous = child.model;
         child.model = preferredModel(previous, model);
         if (child.model === previous || child.terminalState !== undefined) return;
-        if (previous && this.modelValue(previous.model) === this.modelValue(model.model)) return;
+        if (previous && this.sameModelValue(previous.model, model.model)) return;
         await this.reportModel(threadId, child.sessionId);
     }
 
@@ -583,11 +584,10 @@ export class CodexSubagentEventRouter {
         return model;
     }
 
-    /** The value of the model option for a model, which can differ from the model string that Codex reports. */
-    private modelValue(model: string): string {
-        const models = this.rootModels();
-        const option = createSubagentModelConfigOption(models?.availableModels ?? [], models?.currentModel ?? null, model);
-        return String(option.currentValue);
+    /** Two models give the same option value, although Codex can spell one model in two ways. */
+    private sameModelValue(first: string, second: string): boolean {
+        const availableModels = this.rootModels()?.availableModels ?? [];
+        return subagentModelValue(availableModels, first) === subagentModelValue(availableModels, second);
     }
 
     /**

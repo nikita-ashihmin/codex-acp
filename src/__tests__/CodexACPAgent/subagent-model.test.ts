@@ -400,6 +400,26 @@ describe('the model of a native subagent session', () => {
         expect(modelReports(sent)).toEqual(['child-1 gpt-5.2-codex "5.2 Codex"']);
     });
 
+    it('keeps an early settings change only for a thread whose start this root kept', async () => {
+        const {router, sent} = v1Router();
+
+        await feed(
+            router,
+            spawn(null, "child-1", "root", []),
+            // A neighbouring session can change the settings of its own thread while this spawn is in flight.
+            settings("gpt-5.2-codex", "child-1"),
+            spawn(null, "child-1", "root", ["child-1"], "item/completed"),
+            activity(null),
+            spawn(null, "child-2", "root", []),
+            threadStarted("child-2", "gpt-5.5"),
+            settings("gpt-5.2-codex", "child-2"),
+            spawn(null, "child-2", "root", ["child-2"], "item/completed"),
+            activity(null, "child-2", "/root/second"),
+        );
+
+        expect(modelReports(sent)).toEqual(['child-2 gpt-5.2-codex "5.2 Codex"']);
+    });
+
     it('drops the early models when the root turn ends', async () => {
         const {router, sent} = v1Router();
 
