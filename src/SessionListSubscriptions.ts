@@ -137,6 +137,8 @@ interface Subscription {
 export interface ThreadEntry {
     thread: Thread;
     archived: boolean;
+    /** From `thread/read`, whose `forkedFromId` is the fork parent, also when it is `null`. `thread/list` has none. */
+    read?: true;
 }
 
 export class SessionListSubscriptions {
@@ -340,7 +342,7 @@ export class SessionListSubscriptions {
     }
 
     /**
-     * These threads have more to show than their last rows did, as a fork parent read from the rollout: they are
+     * These threads have more to show than their last rows did, as a fork parent that `thread/read` gave: they are
      * read again, as for a change of their own. Without a subscription nothing is kept: a later list has them.
      */
     threadsChanged(threadIds: string[]): void {
@@ -845,7 +847,7 @@ export class SessionListSubscriptions {
             return null;
         }
         if (!isListedThread(thread)) return null;
-        return {thread, archived: thread.path !== null && isArchivedRolloutPath(thread.path, this.deps.codexHome())};
+        return {thread, archived: thread.path !== null && isArchivedRolloutPath(thread.path, this.deps.codexHome()), read: true};
     }
 
     /** The groups whose scope has the cwd. The worktrees of a group are resolved again every 10 s at most. */

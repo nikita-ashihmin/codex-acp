@@ -1,38 +1,41 @@
 /**
  * The thread that a Codex thread was forked from, for the `forkedFrom` field of its session list row.
  *
- * `thread/list` answers `forkedFromId: null` for every thread; the fork parent is in the first line of the
- * thread's rollout, `session_meta`, as `payload.forked_from_id`. That line never changes once it is written, so
- * the answer is cached for the thread's lifetime, a fork or not. A list never waits for the read: the rollouts are
- * read in the background, and a fork found there is reported, see {@link SessionForkOriginsDeps.onFound}.
+ * `thread/list` answers `forkedFromId: null` for every thread; `thread/read` without turns gives the fork parent.
+ * The fork parent never changes, so the answer is cached for the thread's lifetime, a fork or not. A list never
+ * waits for the read: the threads are read in the background, and a fork found there is reported, see
+ * {@link SessionForkOriginsDeps.onFound}.
  */
 
-import fs from "node:fs/promises";
-import type {Thread} from "./app-server/v2";
+import type {Thread, ThreadReadParams, ThreadReadResponse} from "./app-server/v2";
+import {isThreadNotMaterializedError} from "./CodexThreadErrors";
 import {logger} from "./Logger";
+import {isMissingThreadError} from "./SessionIndexMutations";
+
+/** The app-server request that the fork origins need. */
+export interface SessionForkOriginsReader {
+    threadRead(params: ThreadReadParams): Promise<ThreadReadResponse>;
+}
 
 export interface SessionForkOriginsDeps {
+    /** The app-server to read from, or `null` when none runs: then nothing is read. */
+    reader(): SessionForkOriginsReader | null;
     /** These threads turned out to be forks: their rows get `forkedFrom` now. */
     onFound(threadIds: string[]): void;
 }
 
-/** How much of the start of a rollout is read for its first line, and in what steps. */
-const FIRST_LINE_LIMIT = 1024 * 1024;
-const FIRST_LINE_STEP = 64 * 1024;
 /** The most threads whose answer is kept. An entry is a thread id and a parent id. */
 const MAX_CACHED = 16_384;
-/** The most rollouts read at a time. */
+/** The most `thread/read` requests at a time. */
 const READ_CONCURRENCY = 8;
-const NEWLINE = 0x0a;
 
-/** A rollout whose first line was not complete or not there: read again once the thread changes. */
+/** A thread that Codex could not read yet, as one not written yet: read again once the thread changes. */
 interface Unknown {
-    path: string;
     updatedAt: number;
 }
 
 export class SessionForkOrigins {
-    /** The fork parent of each thread, `null` for no fork, or the thread as it was when its first line was missing. */
+    /** The fork parent of each thread, `null` for no fork, or the thread as it was when it could not be read yet. */
     private readonly origins = new Map<string, string | null | Unknown>();
     private readonly pending = new Map<string, Thread>();
     private timer: ReturnType<typeof setTimeout> | null = null;
@@ -42,22 +45,30 @@ export class SessionForkOrigins {
     constructor(private readonly deps: SessionForkOriginsDeps) {}
 
     /**
-     * The fork parent of a thread: `Thread.forkedFromId` when Codex gives it, else the one read from the rollout,
-     * `null` for no fork or before the rollout was read. A thread that is not read yet is read in the background.
+     * The fork parent of a thread: `Thread.forkedFromId` when Codex gives it, else the one `thread/read` gave,
+     * `null` for no fork or before the read. A thread that is not read yet is read in the background.
      */
     originOf(thread: Thread): string | null {
         if (thread.forkedFromId) return thread.forkedFromId;
         const known = this.origins.get(thread.id);
-        if (typeof known === "string" || known === null) return known;
+        if (isAnswer(known)) return known;
+        // A thread without a rollout is not listed, and Codex has nothing to read for it yet.
         if (thread.path === null) return null;
-        if (known === undefined || known.path !== thread.path || known.updatedAt !== thread.updatedAt) this.schedule(thread);
+        if (known === undefined || known.updatedAt !== thread.updatedAt) this.schedule(thread);
         return null;
     }
 
-    /** This adapter forked `parentId` into `threadId`: the fork parent is known without a read of the rollout. */
+    /** This adapter forked `parentId` into `threadId`: the fork parent is known without a read. */
     remember(threadId: string, parentId: string): void {
         this.pending.delete(threadId);
         remember(this.origins, threadId, parentId);
+    }
+
+    /** Another part of the adapter read the thread with `thread/read`: its `forkedFromId` is the answer, if none is known yet. */
+    readElsewhere(thread: Thread): void {
+        if (isAnswer(this.origins.get(thread.id))) return;
+        this.pending.delete(thread.id);
+        remember(this.origins, thread.id, thread.forkedFromId || null);
     }
 
     /** Drops the pending reads. */
@@ -103,75 +114,39 @@ export class SessionForkOrigins {
         }
     }
 
-    /** Reads the fork parent of a thread from its rollout; true when it is a fork. */
+    /** Reads the fork parent of a thread with `thread/read`; true when it is a fork. */
     private async read(thread: Thread): Promise<boolean> {
         // A thread listed again while it was read waits for that read, which may have answered meanwhile.
-        if (thread.path === null || isAnswer(this.origins.get(thread.id))) return false;
-        let origin: string | null | undefined;
-        try {
-            origin = await readForkOrigin(thread.path);
-        } catch (error) {
-            // Not cached: the thread is read again when it is listed next.
-            logger.log("Cannot read the fork parent of a thread", {threadId: thread.id, error: String(error)});
-            return false;
-        }
-        // An answer is final: a later read of a moved or cut rollout does not take it back.
         if (isAnswer(this.origins.get(thread.id))) return false;
-        remember(this.origins, thread.id, origin === undefined ? {path: thread.path, updatedAt: thread.updatedAt} : origin);
+        // Without an app-server, the thread is read when it is listed next.
+        const reader = this.deps.reader();
+        if (reader === null) return false;
+        let origin: string | null | Unknown;
+        try {
+            origin = (await reader.threadRead({threadId: thread.id, includeTurns: false})).thread.forkedFromId || null;
+        } catch (error) {
+            if (!isNotReadableYet(error)) {
+                // Not cached: the thread is read again when it is listed next.
+                logger.log("Cannot read the fork parent of a thread", {threadId: thread.id, error: String(error)});
+                return false;
+            }
+            origin = {updatedAt: thread.updatedAt};
+        }
+        // An answer is final: a later read does not take it back.
+        if (isAnswer(this.origins.get(thread.id))) return false;
+        remember(this.origins, thread.id, origin);
         return typeof origin === "string";
     }
 }
 
-/**
- * The thread that a rollout was forked from: `payload.forked_from_id` of its first line, `session_meta`, or `null`
- * for a rollout that is no fork. `undefined` while the first line is not complete, or longer than
- * {@link FIRST_LINE_LIMIT}.
- */
-export async function readForkOrigin(file: string): Promise<string | null | undefined> {
-    let handle: fs.FileHandle;
-    try {
-        handle = await fs.open(file, "r");
-    } catch (error) {
-        // Codex writes the rollout of a new thread later.
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-        throw error;
-    }
-    let firstLine: string | null = null;
-    try {
-        const chunks: Buffer[] = [];
-        for (let position = 0; position < FIRST_LINE_LIMIT;) {
-            const chunk = Buffer.alloc(FIRST_LINE_STEP);
-            const {bytesRead} = await handle.read(chunk, 0, FIRST_LINE_STEP, position);
-            if (bytesRead === 0) break;
-            const end = chunk.subarray(0, bytesRead).indexOf(NEWLINE);
-            chunks.push(chunk.subarray(0, end < 0 ? bytesRead : end));
-            if (end >= 0) {
-                firstLine = Buffer.concat(chunks).toString("utf8");
-                break;
-            }
-            position += bytesRead;
-        }
-    } finally {
-        await handle.close();
-    }
-    if (firstLine === null) return undefined;
-    let meta: unknown;
-    try {
-        meta = JSON.parse(firstLine);
-    } catch {
-        return null;
-    }
-    const forkedFrom = field(field(meta, "payload"), "forked_from_id");
-    return field(meta, "type") === "session_meta" && typeof forkedFrom === "string" && forkedFrom !== "" ? forkedFrom : null;
+/** Codex has no rollout of the thread yet, or does not know it yet. */
+function isNotReadableYet(error: unknown): boolean {
+    return isMissingThreadError(error) || isThreadNotMaterializedError(error);
 }
 
-/** A fork parent or `null` for no fork, as opposed to a rollout that could not tell yet. */
+/** A fork parent or `null` for no fork, as opposed to a thread that could not be read yet. */
 function isAnswer(value: string | null | Unknown | undefined): value is string | null {
     return typeof value === "string" || value === null;
-}
-
-function field(value: unknown, key: string): unknown {
-    return value !== null && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined;
 }
 
 /** Keeps a value, most recent last, and drops the oldest beyond {@link MAX_CACHED}. */
